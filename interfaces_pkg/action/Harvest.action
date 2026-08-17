@@ -8,5 +8,5 @@ int32 harvested_count   # 실제로 수확한 개수
 
 ---
 # Feedback — 수확 중 실시간 진행상황
-int32 current_count     # 지금까지 몇 개 땄는지
+int32 current_count     # 지금까지 몇 개 땄는지 !
 string status            # "searching", "grasping", "placing" 등
