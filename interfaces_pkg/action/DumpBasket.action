@@ -1,0 +1,10 @@
+# Goal — 붓기 시작 요청 (별도 파라미터 없음)
+
+---
+# Result — 붓기 종료 시 결과
+bool success
+float32 duration_sec
+
+---
+# Feedback — 붓기 중 진행상황
+string phase   # "tilting", "pouring", "returning"
