@@ -1,5 +1,5 @@
 # Goal — 수확 시작 요청
-int32 target_count      # 이번에 몇 개 수확할지 목표
+int32 target_count      # 이번에 몇 개 수확할지 목표 !
 
 ---
 # Result — 수확 종료 시 결과
