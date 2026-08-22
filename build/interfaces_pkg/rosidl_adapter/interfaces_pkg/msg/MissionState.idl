@@ -1,0 +1,22 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from interfaces_pkg/msg/MissionState.msg
+// generated code does not contain a copyright notice
+
+
+module interfaces_pkg {
+  module msg {
+    struct MissionState {
+      @verbatim (language="comment", text=
+        "\"IDLE\",\"NAV_TO_LOADING\",\"HARVEST\",\"DUMP\",\"CHECK_GOAL\",\"NAV_TO_UNLOAD\",\"COMPLETE\",\"ERROR\"")
+      string state;
+
+      @verbatim (language="comment", text=
+        "지금까지 누적 수확 개수")
+      int32 harvested_total;
+
+      @verbatim (language="comment", text=
+        "목표 수확 개수")
+      int32 goal_count;
+    };
+  };
+};

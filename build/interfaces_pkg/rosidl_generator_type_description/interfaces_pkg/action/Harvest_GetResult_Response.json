@@ -1,0 +1,66 @@
+{
+  "type_description_msg": {
+    "type_description": {
+      "type_name": "interfaces_pkg/action/Harvest_GetResult_Response",
+      "fields": [
+        {
+          "name": "status",
+          "type": {
+            "type_id": 2,
+            "capacity": 0,
+            "string_capacity": 0,
+            "nested_type_name": ""
+          },
+          "default_value": ""
+        },
+        {
+          "name": "result",
+          "type": {
+            "type_id": 1,
+            "capacity": 0,
+            "string_capacity": 0,
+            "nested_type_name": "interfaces_pkg/action/Harvest_Result"
+          },
+          "default_value": ""
+        }
+      ]
+    },
+    "referenced_type_descriptions": [
+      {
+        "type_name": "interfaces_pkg/action/Harvest_Result",
+        "fields": [
+          {
+            "name": "success",
+            "type": {
+              "type_id": 15,
+              "capacity": 0,
+              "string_capacity": 0,
+              "nested_type_name": ""
+            },
+            "default_value": ""
+          },
+          {
+            "name": "harvested_count",
+            "type": {
+              "type_id": 6,
+              "capacity": 0,
+              "string_capacity": 0,
+              "nested_type_name": ""
+            },
+            "default_value": ""
+          }
+        ]
+      }
+    ]
+  },
+  "type_hashes": [
+    {
+      "type_name": "interfaces_pkg/action/Harvest_GetResult_Response",
+      "hash_string": "RIHS01_9065cf7e01a3086c00873ceaa7447a189c55c2ba24dc7532efaee1e5582bb2eb"
+    },
+    {
+      "type_name": "interfaces_pkg/action/Harvest_Result",
+      "hash_string": "RIHS01_5c0c1b12f2e7a56e986b54a3f9d40dd0e082294b0fd7f0207eeb1b978da1469b"
+    }
+  ]
+}

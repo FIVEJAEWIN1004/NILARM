@@ -1,0 +1,36 @@
+{
+  "type_description_msg": {
+    "type_description": {
+      "type_name": "interfaces_pkg/action/Harvest_Feedback",
+      "fields": [
+        {
+          "name": "current_count",
+          "type": {
+            "type_id": 6,
+            "capacity": 0,
+            "string_capacity": 0,
+            "nested_type_name": ""
+          },
+          "default_value": ""
+        },
+        {
+          "name": "status",
+          "type": {
+            "type_id": 17,
+            "capacity": 0,
+            "string_capacity": 0,
+            "nested_type_name": ""
+          },
+          "default_value": ""
+        }
+      ]
+    },
+    "referenced_type_descriptions": []
+  },
+  "type_hashes": [
+    {
+      "type_name": "interfaces_pkg/action/Harvest_Feedback",
+      "hash_string": "RIHS01_9ff6531c6d261af5e4d9691b0c499af14c9dd17bfb374da466272c8e16db1b97"
+    }
+  ]
+}

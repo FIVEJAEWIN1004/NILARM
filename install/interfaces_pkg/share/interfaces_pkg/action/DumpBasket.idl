@@ -1,0 +1,28 @@
+// generated from rosidl_adapter/resource/action.idl.em
+// with input from interfaces_pkg/action/DumpBasket.action
+// generated code does not contain a copyright notice
+
+
+module interfaces_pkg {
+  module action {
+    @verbatim (language="comment", text=
+      "Goal — 붓기 시작 요청 (별도 파라미터 없음!)")
+    struct DumpBasket_Goal {
+      uint8 structure_needs_at_least_one_member;
+    };
+    @verbatim (language="comment", text=
+      "Result — 붓기 종료 시 결과")
+    struct DumpBasket_Result {
+      boolean success;
+
+      float duration_sec;
+    };
+    @verbatim (language="comment", text=
+      "Feedback — 붓기 중 진행상황")
+    struct DumpBasket_Feedback {
+      @verbatim (language="comment", text=
+        "\"tilting\", \"pouring\", \"returning\"")
+      string phase;
+    };
+  };
+};

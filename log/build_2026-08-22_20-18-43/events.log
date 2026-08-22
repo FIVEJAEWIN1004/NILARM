@@ -1,0 +1,54 @@
+[0.000000] (-) TimerEvent: {}
+[0.000496] (arm_control_pkg) JobQueued: {'identifier': 'arm_control_pkg', 'dependencies': OrderedDict()}
+[0.000537] (interfaces_pkg) JobQueued: {'identifier': 'interfaces_pkg', 'dependencies': OrderedDict()}
+[0.000549] (nav_pkg) JobQueued: {'identifier': 'nav_pkg', 'dependencies': OrderedDict()}
+[0.000557] (vision_pkg) JobQueued: {'identifier': 'vision_pkg', 'dependencies': OrderedDict()}
+[0.000567] (arm_control_pkg) JobStarted: {'identifier': 'arm_control_pkg'}
+[0.004184] (interfaces_pkg) JobStarted: {'identifier': 'interfaces_pkg'}
+[0.004816] (nav_pkg) JobStarted: {'identifier': 'nav_pkg'}
+[0.006325] (vision_pkg) JobStarted: {'identifier': 'vision_pkg'}
+[0.099962] (-) TimerEvent: {}
+[0.123607] (interfaces_pkg) JobProgress: {'identifier': 'interfaces_pkg', 'progress': 'cmake'}
+[0.123728] (interfaces_pkg) Command: {'cmd': ['/usr/bin/cmake', '/home/fivejaewin/NILARM/src/interfaces_pkg', '-DCMAKE_INSTALL_PREFIX=/home/fivejaewin/NILARM/install/interfaces_pkg'], 'cwd': '/home/fivejaewin/NILARM/build/interfaces_pkg', 'env': OrderedDict({'LESSOPEN': '| /usr/bin/lesspipe %s', 'LANGUAGE': 'ko:en_US:en', 'USER': 'fivejaewin', 'LC_TIME': 'C.UTF-8', 'XDG_SESSION_TYPE': 'wayland', 'SHLVL': '1', 'HOME': '/home/fivejaewin', 'OLDPWD': '/home/fivejaewin/NILARM/src', 'DESKTOP_SESSION': 'ubuntu', 'GNOME_SHELL_SESSION_MODE': 'ubuntu', 'GTK_MODULES': 'gail:atk-bridge', 'LC_MONETARY': 'C.UTF-8', 'MANAGERPID': '1981', 'SYSTEMD_EXEC_PID': '2434', 'GSM_SKIP_SSH_AGENT_WORKAROUND': 'true', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', 'COLORTERM': 'truecolor', 'TERMINATOR_DBUS_NAME': 'net.tenshu.Terminator25ef4b219e3b005583550f2b0f9f990c3', 'GIO_LAUNCHED_DESKTOP_FILE_PID': '9553', 'GNOME_KEYRING_CONTROL': '/run/user/1000/keyring', 'DEBUGINFOD_URLS': 'https://debuginfod.ubuntu.com', 'IM_CONFIG_PHASE': '1', 'WAYLAND_DISPLAY': 'wayland-0', 'LOGNAME': 'fivejaewin', 'JOURNAL_STREAM': '10:21784', '_': '/usr/bin/colcon', 'MEMORY_PRESSURE_WATCH': '/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/session.slice/org.gnome.SettingsDaemon.MediaKeys.service/memory.pressure', 'XDG_SESSION_CLASS': 'user', 'USERNAME': 'fivejaewin', 'TERM': 'xterm-256color', 'GNOME_DESKTOP_SESSION_ID': 'this-is-deprecated', 'PATH': '/home/fivejaewin/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/finejaewin/.local/bin:/home/finejaewin/.local/bin', 'SESSION_MANAGER': 'local/FIVEJAEWIN1004:@/tmp/.ICE-unix/2217,unix/FIVEJAEWIN1004:/tmp/.ICE-unix/2217', 'INVOCATION_ID': 'e2f3e70af03943979f3c77049f0bd7a0', 'PAPERSIZE': 'a4', 'XDG_MENU_PREFIX': 'gnome-', 'LC_ADDRESS': 'C.UTF-8', 'GNOME_SETUP_DISPLAY': ':1', 'XDG_RUNTIME_DIR': '/run/user/1000', 'DISPLAY': ':0', 'TERMINATOR_DBUS_PATH': '/net/tenshu/Terminator2', 'LANG': 'ko_KR.UTF-8', 'XDG_CURRENT_DESKTOP': 'ubuntu:GNOME', 'LC_TELEPHONE': 'C.UTF-8', 'XMODIFIERS': '@im=ibus', 'XDG_SESSION_DESKTOP': 'ubuntu', 'XAUTHORITY': '/run/user/1000/.mutter-Xwaylandauth.3CY5T3', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'SSH_AUTH_SOCK': '/run/user/1000/keyring/ssh', 'SHELL': '/bin/bash', 'LC_NAME': 'C.UTF-8', 'TERMINATOR_UUID': 'urn:uuid:481c1a33-b5b4-4fc9-a80a-88de6ce12b8d', 'QT_ACCESSIBILITY': '1', 'GDMSESSION': 'ubuntu', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', 'LC_MEASUREMENT': 'C.UTF-8', 'LC_IDENTIFICATION': 'C.UTF-8', 'QT_IM_MODULE': 'ibus', 'PWD': '/home/fivejaewin/NILARM/build/interfaces_pkg', 'XDG_CONFIG_DIRS': '/etc/xdg/xdg-ubuntu:/etc/xdg', 'XDG_DATA_DIRS': '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop', 'LC_NUMERIC': 'C.UTF-8', 'LC_PAPER': 'C.UTF-8', 'COLCON': '1', 'MEMORY_PRESSURE_WRITE': 'c29tZSAyMDAwMDAgMjAwMDAwMAA=', 'VTE_VERSION': '7600'}), 'shell': False}
+[0.200045] (-) TimerEvent: {}
+[0.247097] (interfaces_pkg) StdoutLine: {'line': b'-- The C compiler identification is GNU 13.3.0\n'}
+[0.300124] (-) TimerEvent: {}
+[0.322385] (interfaces_pkg) StdoutLine: {'line': b'-- The CXX compiler identification is GNU 13.3.0\n'}
+[0.340106] (interfaces_pkg) StdoutLine: {'line': b'-- Detecting C compiler ABI info\n'}
+[0.400261] (-) TimerEvent: {}
+[0.426497] (interfaces_pkg) StdoutLine: {'line': b'-- Detecting C compiler ABI info - done\n'}
+[0.437108] (interfaces_pkg) StdoutLine: {'line': b'-- Check for working C compiler: /usr/bin/cc - skipped\n'}
+[0.437526] (interfaces_pkg) StdoutLine: {'line': b'-- Detecting C compile features\n'}
+[0.438193] (interfaces_pkg) StdoutLine: {'line': b'-- Detecting C compile features - done\n'}
+[0.447167] (interfaces_pkg) StdoutLine: {'line': b'-- Detecting CXX compiler ABI info\n'}
+[0.500387] (-) TimerEvent: {}
+[0.535758] (interfaces_pkg) StdoutLine: {'line': b'-- Detecting CXX compiler ABI info - done\n'}
+[0.546888] (interfaces_pkg) StdoutLine: {'line': b'-- Check for working CXX compiler: /usr/bin/c++ - skipped\n'}
+[0.547217] (interfaces_pkg) StdoutLine: {'line': b'-- Detecting CXX compile features\n'}
+[0.547600] (interfaces_pkg) StdoutLine: {'line': b'-- Detecting CXX compile features - done\n'}
+[0.556451] (interfaces_pkg) StderrLine: {'line': b'\x1b[31mCMake Error at CMakeLists.txt:8 (find_package):\n'}
+[0.556652] (interfaces_pkg) StderrLine: {'line': b'  By not providing "Findament_cmake.cmake" in CMAKE_MODULE_PATH this project\n'}
+[0.556774] (interfaces_pkg) StderrLine: {'line': b'  has asked CMake to find a package configuration file provided by\n'}
+[0.556863] (interfaces_pkg) StderrLine: {'line': b'  "ament_cmake", but CMake did not find one.\n'}
+[0.556937] (interfaces_pkg) StderrLine: {'line': b'\n'}
+[0.557013] (interfaces_pkg) StderrLine: {'line': b'  Could not find a package configuration file provided by "ament_cmake" with\n'}
+[0.557089] (interfaces_pkg) StderrLine: {'line': b'  any of the following names:\n'}
+[0.557164] (interfaces_pkg) StderrLine: {'line': b'\n'}
+[0.557238] (interfaces_pkg) StderrLine: {'line': b'    ament_cmakeConfig.cmake\n'}
+[0.557313] (interfaces_pkg) StderrLine: {'line': b'    ament_cmake-config.cmake\n'}
+[0.557388] (interfaces_pkg) StderrLine: {'line': b'\n'}
+[0.557462] (interfaces_pkg) StderrLine: {'line': b'  Add the installation prefix of "ament_cmake" to CMAKE_PREFIX_PATH or set\n'}
+[0.557537] (interfaces_pkg) StderrLine: {'line': b'  "ament_cmake_DIR" to a directory containing one of the above files.  If\n'}
+[0.557613] (interfaces_pkg) StderrLine: {'line': b'  "ament_cmake" provides a separate development package or SDK, be sure it\n'}
+[0.557702] (interfaces_pkg) StderrLine: {'line': b'  has been installed.\n'}
+[0.557784] (interfaces_pkg) StderrLine: {'line': b'\n'}
+[0.557873] (interfaces_pkg) StderrLine: {'line': b'\x1b[0m\n'}
+[0.557953] (interfaces_pkg) StdoutLine: {'line': b'-- Configuring incomplete, errors occurred!\n'}
+[0.560210] (interfaces_pkg) CommandEnded: {'returncode': 1}
+[0.577368] (interfaces_pkg) JobEnded: {'identifier': 'interfaces_pkg', 'rc': 1}
+[0.600508] (-) TimerEvent: {}
+[0.657276] (nav_pkg) JobEnded: {'identifier': 'nav_pkg', 'rc': 'SIGINT'}
+[0.666357] (vision_pkg) JobEnded: {'identifier': 'vision_pkg', 'rc': 'SIGINT'}
+[0.700723] (-) TimerEvent: {}
+[0.744555] (arm_control_pkg) JobEnded: {'identifier': 'arm_control_pkg', 'rc': 'SIGINT'}
+[0.755208] (-) EventReactorShutdown: {}

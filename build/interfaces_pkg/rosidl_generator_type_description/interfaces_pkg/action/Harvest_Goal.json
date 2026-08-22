@@ -1,0 +1,26 @@
+{
+  "type_description_msg": {
+    "type_description": {
+      "type_name": "interfaces_pkg/action/Harvest_Goal",
+      "fields": [
+        {
+          "name": "target_count",
+          "type": {
+            "type_id": 6,
+            "capacity": 0,
+            "string_capacity": 0,
+            "nested_type_name": ""
+          },
+          "default_value": ""
+        }
+      ]
+    },
+    "referenced_type_descriptions": []
+  },
+  "type_hashes": [
+    {
+      "type_name": "interfaces_pkg/action/Harvest_Goal",
+      "hash_string": "RIHS01_bd32aaa26402fd05627407cdab48e8b6960d7ebbcab4261a6b1a48d233a5f512"
+    }
+  ]
+}
