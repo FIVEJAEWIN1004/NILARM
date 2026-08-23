@@ -24,6 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'drive_test = nav_pkg.drive_test:main',
         ],
     },
 )
