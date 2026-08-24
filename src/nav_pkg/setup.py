@@ -25,6 +25,12 @@ setup(
     entry_points={
         'console_scripts': [
             'drive_test = nav_pkg.drive_test:main',
+            'obstacle_detector = nav_pkg.obstacle_detector:main',
+            'odom_reader = nav_pkg.odom_reader:main',
+            'odom_drive_test = nav_pkg.odom_drive_test:main',
+            'odom_rotate_test = nav_pkg.odom_rotate_test:main',
+            'path_test = nav_pkg.path_test:main',
+            'goal_point_test = nav_pkg.goal_point_test:main',
         ],
     },
 )
