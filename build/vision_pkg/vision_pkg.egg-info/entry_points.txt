@@ -1,2 +1,3 @@
 [console_scripts]
+camera_drive_controller = vision_pkg.camera_drive_controller:main
 vision_node = vision_pkg.vision_node:main

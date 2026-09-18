@@ -1,0 +1,21 @@
+ir_align_node:
+  ros__parameters:
+    cmd_vel_topic: /cmd_vel
+    read_rate_hz: 20.0
+
+    # REQUIRED: set this between measured bright-floor and STOP-area values.
+    # The node refuses to activate while this is negative.
+    dark_threshold: -1.0
+    dark_is_low: true
+
+    linear_speed: 0.015
+    search_speed: 0.010
+    angular_speed: 0.10
+
+    debounce_samples: 3
+    center_hold_sec: 0.5
+    max_alignment_sec: 8.0
+
+    # Keep false when the desired center signature is bright-dark-bright.
+    all_dark_is_centered: false
+    auto_start: false

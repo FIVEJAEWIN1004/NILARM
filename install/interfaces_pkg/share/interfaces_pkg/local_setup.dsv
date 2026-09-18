@@ -1,4 +1,1 @@
-source;share/interfaces_pkg/environment/ament_prefix_path.sh
-source;share/interfaces_pkg/environment/library_path.sh
-source;share/interfaces_pkg/environment/path.sh
-source;share/interfaces_pkg/environment/pythonpath.sh
+/home/fivejaewin/NILARM/build/interfaces_pkg/ament_cmake_environment_hooks/local_setup.dsv

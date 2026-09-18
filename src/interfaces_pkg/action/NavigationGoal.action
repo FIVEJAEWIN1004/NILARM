@@ -1,0 +1,13 @@
+# Goal — 목표 지점까지 주행 요청
+float32 target_x         # 목표 x좌표 (m, map 기준)
+float32 target_y         # 목표 y좌표 (m, map 기준)
+
+---
+# Result — 주행 종료 시 결과
+bool success
+float32 final_distance_error   # 목표 지점과의 최종 거리 오차 (m)
+
+---
+# Feedback — 주행 중 실시간 진행상황
+float32 distance_remaining     # 목표까지 남은 거리 (m)
+string status                   # "moving", "avoiding", "arrived" 등

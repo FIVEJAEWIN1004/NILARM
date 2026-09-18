@@ -1,10 +1,1 @@
-action/DumpBasket.action
-action/DumpBasket.idl
-action/Harvest.action
-action/Harvest.idl
-msg/BasketStatus.idl
-msg/BasketStatus.msg
-msg/FruitDetection.idl
-msg/FruitDetection.msg
-msg/MissionState.idl
-msg/MissionState.msg
+/home/fivejaewin/NILARM/build/interfaces_pkg/ament_cmake_index/share/ament_index/resource_index/rosidl_interfaces/interfaces_pkg

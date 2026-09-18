@@ -184,3 +184,326 @@ impl rosidl_runtime_rs::Message for MissionState {
 }
 
 
+// Corresponds to interfaces_pkg__msg__LaneCenter
+
+// This struct is not documented.
+#[allow(missing_docs)]
+
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct LaneCenter {
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub center_x: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub image_center_x: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub error: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub confidence: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub detected: bool,
+
+}
+
+
+
+impl Default for LaneCenter {
+  fn default() -> Self {
+    <Self as rosidl_runtime_rs::Message>::from_rmw_message(super::msg::rmw::LaneCenter::default())
+  }
+}
+
+impl rosidl_runtime_rs::Message for LaneCenter {
+  type RmwMsg = super::msg::rmw::LaneCenter;
+
+  fn into_rmw_message(msg_cow: std::borrow::Cow<'_, Self>) -> std::borrow::Cow<'_, Self::RmwMsg> {
+    match msg_cow {
+      std::borrow::Cow::Owned(msg) => std::borrow::Cow::Owned(Self::RmwMsg {
+        center_x: msg.center_x,
+        image_center_x: msg.image_center_x,
+        error: msg.error,
+        confidence: msg.confidence,
+        detected: msg.detected,
+      }),
+      std::borrow::Cow::Borrowed(msg) => std::borrow::Cow::Owned(Self::RmwMsg {
+      center_x: msg.center_x,
+      image_center_x: msg.image_center_x,
+      error: msg.error,
+      confidence: msg.confidence,
+      detected: msg.detected,
+      })
+    }
+  }
+
+  fn from_rmw_message(msg: Self::RmwMsg) -> Self {
+    Self {
+      center_x: msg.center_x,
+      image_center_x: msg.image_center_x,
+      error: msg.error,
+      confidence: msg.confidence,
+      detected: msg.detected,
+    }
+  }
+}
+
+
+// Corresponds to interfaces_pkg__msg__RoadModel
+
+// This struct is not documented.
+#[allow(missing_docs)]
+
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct RoadModel {
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub header: std_msgs::msg::Header,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub left_detected: bool,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub right_detected: bool,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub center_valid: bool,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub predicted: bool,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub left_x: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub right_x: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub center_x: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub image_center_x: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub lane_width_px: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub lateral_error_px: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub heading_error_rad: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub curvature: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub confidence: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub branch_flags: u8,
+
+}
+
+impl RoadModel {
+
+    // This constant is not documented.
+    #[allow(missing_docs)]
+    pub const BRANCH_NONE: u8 = 0;
+
+
+    // This constant is not documented.
+    #[allow(missing_docs)]
+    pub const BRANCH_EXTRA_BOUNDARY: u8 = 1;
+
+}
+
+
+impl Default for RoadModel {
+  fn default() -> Self {
+    <Self as rosidl_runtime_rs::Message>::from_rmw_message(super::msg::rmw::RoadModel::default())
+  }
+}
+
+impl rosidl_runtime_rs::Message for RoadModel {
+  type RmwMsg = super::msg::rmw::RoadModel;
+
+  fn into_rmw_message(msg_cow: std::borrow::Cow<'_, Self>) -> std::borrow::Cow<'_, Self::RmwMsg> {
+    match msg_cow {
+      std::borrow::Cow::Owned(msg) => std::borrow::Cow::Owned(Self::RmwMsg {
+        header: std_msgs::msg::Header::into_rmw_message(std::borrow::Cow::Owned(msg.header)).into_owned(),
+        left_detected: msg.left_detected,
+        right_detected: msg.right_detected,
+        center_valid: msg.center_valid,
+        predicted: msg.predicted,
+        left_x: msg.left_x,
+        right_x: msg.right_x,
+        center_x: msg.center_x,
+        image_center_x: msg.image_center_x,
+        lane_width_px: msg.lane_width_px,
+        lateral_error_px: msg.lateral_error_px,
+        heading_error_rad: msg.heading_error_rad,
+        curvature: msg.curvature,
+        confidence: msg.confidence,
+        branch_flags: msg.branch_flags,
+      }),
+      std::borrow::Cow::Borrowed(msg) => std::borrow::Cow::Owned(Self::RmwMsg {
+        header: std_msgs::msg::Header::into_rmw_message(std::borrow::Cow::Borrowed(&msg.header)).into_owned(),
+      left_detected: msg.left_detected,
+      right_detected: msg.right_detected,
+      center_valid: msg.center_valid,
+      predicted: msg.predicted,
+      left_x: msg.left_x,
+      right_x: msg.right_x,
+      center_x: msg.center_x,
+      image_center_x: msg.image_center_x,
+      lane_width_px: msg.lane_width_px,
+      lateral_error_px: msg.lateral_error_px,
+      heading_error_rad: msg.heading_error_rad,
+      curvature: msg.curvature,
+      confidence: msg.confidence,
+      branch_flags: msg.branch_flags,
+      })
+    }
+  }
+
+  fn from_rmw_message(msg: Self::RmwMsg) -> Self {
+    Self {
+      header: std_msgs::msg::Header::from_rmw_message(msg.header),
+      left_detected: msg.left_detected,
+      right_detected: msg.right_detected,
+      center_valid: msg.center_valid,
+      predicted: msg.predicted,
+      left_x: msg.left_x,
+      right_x: msg.right_x,
+      center_x: msg.center_x,
+      image_center_x: msg.image_center_x,
+      lane_width_px: msg.lane_width_px,
+      lateral_error_px: msg.lateral_error_px,
+      heading_error_rad: msg.heading_error_rad,
+      curvature: msg.curvature,
+      confidence: msg.confidence,
+      branch_flags: msg.branch_flags,
+    }
+  }
+}
+
+
+// Corresponds to interfaces_pkg__msg__ObstacleStatus
+
+// This struct is not documented.
+#[allow(missing_docs)]
+
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct ObstacleStatus {
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub front_distance: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub left_distance: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub right_distance: f32,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub obstacle_detected: bool,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub emergency_stop: bool,
+
+}
+
+
+
+impl Default for ObstacleStatus {
+  fn default() -> Self {
+    <Self as rosidl_runtime_rs::Message>::from_rmw_message(super::msg::rmw::ObstacleStatus::default())
+  }
+}
+
+impl rosidl_runtime_rs::Message for ObstacleStatus {
+  type RmwMsg = super::msg::rmw::ObstacleStatus;
+
+  fn into_rmw_message(msg_cow: std::borrow::Cow<'_, Self>) -> std::borrow::Cow<'_, Self::RmwMsg> {
+    match msg_cow {
+      std::borrow::Cow::Owned(msg) => std::borrow::Cow::Owned(Self::RmwMsg {
+        front_distance: msg.front_distance,
+        left_distance: msg.left_distance,
+        right_distance: msg.right_distance,
+        obstacle_detected: msg.obstacle_detected,
+        emergency_stop: msg.emergency_stop,
+      }),
+      std::borrow::Cow::Borrowed(msg) => std::borrow::Cow::Owned(Self::RmwMsg {
+      front_distance: msg.front_distance,
+      left_distance: msg.left_distance,
+      right_distance: msg.right_distance,
+      obstacle_detected: msg.obstacle_detected,
+      emergency_stop: msg.emergency_stop,
+      })
+    }
+  }
+
+  fn from_rmw_message(msg: Self::RmwMsg) -> Self {
+    Self {
+      front_distance: msg.front_distance,
+      left_distance: msg.left_distance,
+      right_distance: msg.right_distance,
+      obstacle_detected: msg.obstacle_detected,
+      emergency_stop: msg.emergency_stop,
+    }
+  }
+}
+
+

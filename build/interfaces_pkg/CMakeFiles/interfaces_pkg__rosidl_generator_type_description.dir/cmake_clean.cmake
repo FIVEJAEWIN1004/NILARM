@@ -2,9 +2,13 @@ file(REMOVE_RECURSE
   "CMakeFiles/interfaces_pkg__rosidl_generator_type_description"
   "rosidl_generator_type_description/interfaces_pkg/action/DumpBasket.json"
   "rosidl_generator_type_description/interfaces_pkg/action/Harvest.json"
+  "rosidl_generator_type_description/interfaces_pkg/action/NavigationGoal.json"
   "rosidl_generator_type_description/interfaces_pkg/msg/BasketStatus.json"
   "rosidl_generator_type_description/interfaces_pkg/msg/FruitDetection.json"
+  "rosidl_generator_type_description/interfaces_pkg/msg/LaneCenter.json"
   "rosidl_generator_type_description/interfaces_pkg/msg/MissionState.json"
+  "rosidl_generator_type_description/interfaces_pkg/msg/ObstacleStatus.json"
+  "rosidl_generator_type_description/interfaces_pkg/msg/RoadModel.json"
 )
 
 # Per-language clean rules from dependency scanning.

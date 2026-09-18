@@ -7,13 +7,19 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FruitDetection.msg"
   "msg/BasketStatus.msg"
   "msg/MissionState.msg"
+  "msg/LaneCenter.msg"
+  "msg/RoadModel.msg"
+  "msg/ObstacleStatus.msg"
   "action/Harvest.action"
   "action/DumpBasket.action"
+  "action/NavigationGoal.action"
+  DEPENDENCIES std_msgs
 )
 
 ament_package()

@@ -618,6 +618,316 @@ impl rosidl_runtime_rs::RmwMessage for DumpBasket_FeedbackMessage where Self: Si
 }
 
 
+#[link(name = "interfaces_pkg__rosidl_typesupport_c")]
+extern "C" {
+    fn rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_Goal() -> *const std::ffi::c_void;
+}
+
+#[link(name = "interfaces_pkg__rosidl_generator_c")]
+extern "C" {
+    fn interfaces_pkg__action__NavigationGoal_Goal__init(msg: *mut NavigationGoal_Goal) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_Goal__Sequence__init(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_Goal>, size: usize) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_Goal__Sequence__fini(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_Goal>);
+    fn interfaces_pkg__action__NavigationGoal_Goal__Sequence__copy(in_seq: &rosidl_runtime_rs::Sequence<NavigationGoal_Goal>, out_seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_Goal>) -> bool;
+}
+
+// Corresponds to interfaces_pkg__action__NavigationGoal_Goal
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+
+
+// This struct is not documented.
+#[allow(missing_docs)]
+
+#[allow(non_camel_case_types)]
+#[repr(C)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct NavigationGoal_Goal {
+    /// 목표 x좌표 (m, map 기준)
+    pub target_x: f32,
+
+    /// 목표 y좌표 (m, map 기준)
+    pub target_y: f32,
+
+}
+
+
+
+impl Default for NavigationGoal_Goal {
+  fn default() -> Self {
+    unsafe {
+      let mut msg = std::mem::zeroed();
+      if !interfaces_pkg__action__NavigationGoal_Goal__init(&mut msg as *mut _) {
+        panic!("Call to interfaces_pkg__action__NavigationGoal_Goal__init() failed");
+      }
+      msg
+    }
+  }
+}
+
+impl rosidl_runtime_rs::SequenceAlloc for NavigationGoal_Goal {
+  fn sequence_init(seq: &mut rosidl_runtime_rs::Sequence<Self>, size: usize) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_Goal__Sequence__init(seq as *mut _, size) }
+  }
+  fn sequence_fini(seq: &mut rosidl_runtime_rs::Sequence<Self>) {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_Goal__Sequence__fini(seq as *mut _) }
+  }
+  fn sequence_copy(in_seq: &rosidl_runtime_rs::Sequence<Self>, out_seq: &mut rosidl_runtime_rs::Sequence<Self>) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_Goal__Sequence__copy(in_seq, out_seq as *mut _) }
+  }
+}
+
+impl rosidl_runtime_rs::Message for NavigationGoal_Goal {
+  type RmwMsg = Self;
+  fn into_rmw_message(msg_cow: std::borrow::Cow<'_, Self>) -> std::borrow::Cow<'_, Self::RmwMsg> { msg_cow }
+  fn from_rmw_message(msg: Self::RmwMsg) -> Self { msg }
+}
+
+impl rosidl_runtime_rs::RmwMessage for NavigationGoal_Goal where Self: Sized {
+  const TYPE_NAME: &'static str = "interfaces_pkg/action/NavigationGoal_Goal";
+  fn get_type_support() -> *const std::ffi::c_void {
+    // SAFETY: No preconditions for this function.
+    unsafe { rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_Goal() }
+  }
+}
+
+
+#[link(name = "interfaces_pkg__rosidl_typesupport_c")]
+extern "C" {
+    fn rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_Result() -> *const std::ffi::c_void;
+}
+
+#[link(name = "interfaces_pkg__rosidl_generator_c")]
+extern "C" {
+    fn interfaces_pkg__action__NavigationGoal_Result__init(msg: *mut NavigationGoal_Result) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_Result__Sequence__init(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_Result>, size: usize) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_Result__Sequence__fini(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_Result>);
+    fn interfaces_pkg__action__NavigationGoal_Result__Sequence__copy(in_seq: &rosidl_runtime_rs::Sequence<NavigationGoal_Result>, out_seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_Result>) -> bool;
+}
+
+// Corresponds to interfaces_pkg__action__NavigationGoal_Result
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+
+
+// This struct is not documented.
+#[allow(missing_docs)]
+
+#[allow(non_camel_case_types)]
+#[repr(C)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct NavigationGoal_Result {
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub success: bool,
+
+    /// 목표 지점과의 최종 거리 오차 (m)
+    pub final_distance_error: f32,
+
+}
+
+
+
+impl Default for NavigationGoal_Result {
+  fn default() -> Self {
+    unsafe {
+      let mut msg = std::mem::zeroed();
+      if !interfaces_pkg__action__NavigationGoal_Result__init(&mut msg as *mut _) {
+        panic!("Call to interfaces_pkg__action__NavigationGoal_Result__init() failed");
+      }
+      msg
+    }
+  }
+}
+
+impl rosidl_runtime_rs::SequenceAlloc for NavigationGoal_Result {
+  fn sequence_init(seq: &mut rosidl_runtime_rs::Sequence<Self>, size: usize) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_Result__Sequence__init(seq as *mut _, size) }
+  }
+  fn sequence_fini(seq: &mut rosidl_runtime_rs::Sequence<Self>) {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_Result__Sequence__fini(seq as *mut _) }
+  }
+  fn sequence_copy(in_seq: &rosidl_runtime_rs::Sequence<Self>, out_seq: &mut rosidl_runtime_rs::Sequence<Self>) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_Result__Sequence__copy(in_seq, out_seq as *mut _) }
+  }
+}
+
+impl rosidl_runtime_rs::Message for NavigationGoal_Result {
+  type RmwMsg = Self;
+  fn into_rmw_message(msg_cow: std::borrow::Cow<'_, Self>) -> std::borrow::Cow<'_, Self::RmwMsg> { msg_cow }
+  fn from_rmw_message(msg: Self::RmwMsg) -> Self { msg }
+}
+
+impl rosidl_runtime_rs::RmwMessage for NavigationGoal_Result where Self: Sized {
+  const TYPE_NAME: &'static str = "interfaces_pkg/action/NavigationGoal_Result";
+  fn get_type_support() -> *const std::ffi::c_void {
+    // SAFETY: No preconditions for this function.
+    unsafe { rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_Result() }
+  }
+}
+
+
+#[link(name = "interfaces_pkg__rosidl_typesupport_c")]
+extern "C" {
+    fn rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_Feedback() -> *const std::ffi::c_void;
+}
+
+#[link(name = "interfaces_pkg__rosidl_generator_c")]
+extern "C" {
+    fn interfaces_pkg__action__NavigationGoal_Feedback__init(msg: *mut NavigationGoal_Feedback) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_Feedback__Sequence__init(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_Feedback>, size: usize) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_Feedback__Sequence__fini(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_Feedback>);
+    fn interfaces_pkg__action__NavigationGoal_Feedback__Sequence__copy(in_seq: &rosidl_runtime_rs::Sequence<NavigationGoal_Feedback>, out_seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_Feedback>) -> bool;
+}
+
+// Corresponds to interfaces_pkg__action__NavigationGoal_Feedback
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+
+
+// This struct is not documented.
+#[allow(missing_docs)]
+
+#[allow(non_camel_case_types)]
+#[repr(C)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct NavigationGoal_Feedback {
+    /// 목표까지 남은 거리 (m)
+    pub distance_remaining: f32,
+
+    /// "moving", "avoiding", "arrived" 등
+    pub status: rosidl_runtime_rs::String,
+
+}
+
+
+
+impl Default for NavigationGoal_Feedback {
+  fn default() -> Self {
+    unsafe {
+      let mut msg = std::mem::zeroed();
+      if !interfaces_pkg__action__NavigationGoal_Feedback__init(&mut msg as *mut _) {
+        panic!("Call to interfaces_pkg__action__NavigationGoal_Feedback__init() failed");
+      }
+      msg
+    }
+  }
+}
+
+impl rosidl_runtime_rs::SequenceAlloc for NavigationGoal_Feedback {
+  fn sequence_init(seq: &mut rosidl_runtime_rs::Sequence<Self>, size: usize) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_Feedback__Sequence__init(seq as *mut _, size) }
+  }
+  fn sequence_fini(seq: &mut rosidl_runtime_rs::Sequence<Self>) {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_Feedback__Sequence__fini(seq as *mut _) }
+  }
+  fn sequence_copy(in_seq: &rosidl_runtime_rs::Sequence<Self>, out_seq: &mut rosidl_runtime_rs::Sequence<Self>) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_Feedback__Sequence__copy(in_seq, out_seq as *mut _) }
+  }
+}
+
+impl rosidl_runtime_rs::Message for NavigationGoal_Feedback {
+  type RmwMsg = Self;
+  fn into_rmw_message(msg_cow: std::borrow::Cow<'_, Self>) -> std::borrow::Cow<'_, Self::RmwMsg> { msg_cow }
+  fn from_rmw_message(msg: Self::RmwMsg) -> Self { msg }
+}
+
+impl rosidl_runtime_rs::RmwMessage for NavigationGoal_Feedback where Self: Sized {
+  const TYPE_NAME: &'static str = "interfaces_pkg/action/NavigationGoal_Feedback";
+  fn get_type_support() -> *const std::ffi::c_void {
+    // SAFETY: No preconditions for this function.
+    unsafe { rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_Feedback() }
+  }
+}
+
+
+#[link(name = "interfaces_pkg__rosidl_typesupport_c")]
+extern "C" {
+    fn rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_FeedbackMessage() -> *const std::ffi::c_void;
+}
+
+#[link(name = "interfaces_pkg__rosidl_generator_c")]
+extern "C" {
+    fn interfaces_pkg__action__NavigationGoal_FeedbackMessage__init(msg: *mut NavigationGoal_FeedbackMessage) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_FeedbackMessage__Sequence__init(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_FeedbackMessage>, size: usize) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_FeedbackMessage__Sequence__fini(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_FeedbackMessage>);
+    fn interfaces_pkg__action__NavigationGoal_FeedbackMessage__Sequence__copy(in_seq: &rosidl_runtime_rs::Sequence<NavigationGoal_FeedbackMessage>, out_seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_FeedbackMessage>) -> bool;
+}
+
+// Corresponds to interfaces_pkg__action__NavigationGoal_FeedbackMessage
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+
+
+// This struct is not documented.
+#[allow(missing_docs)]
+
+#[allow(non_camel_case_types)]
+#[repr(C)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct NavigationGoal_FeedbackMessage {
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub goal_id: unique_identifier_msgs::msg::rmw::UUID,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub feedback: super::super::action::rmw::NavigationGoal_Feedback,
+
+}
+
+
+
+impl Default for NavigationGoal_FeedbackMessage {
+  fn default() -> Self {
+    unsafe {
+      let mut msg = std::mem::zeroed();
+      if !interfaces_pkg__action__NavigationGoal_FeedbackMessage__init(&mut msg as *mut _) {
+        panic!("Call to interfaces_pkg__action__NavigationGoal_FeedbackMessage__init() failed");
+      }
+      msg
+    }
+  }
+}
+
+impl rosidl_runtime_rs::SequenceAlloc for NavigationGoal_FeedbackMessage {
+  fn sequence_init(seq: &mut rosidl_runtime_rs::Sequence<Self>, size: usize) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_FeedbackMessage__Sequence__init(seq as *mut _, size) }
+  }
+  fn sequence_fini(seq: &mut rosidl_runtime_rs::Sequence<Self>) {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_FeedbackMessage__Sequence__fini(seq as *mut _) }
+  }
+  fn sequence_copy(in_seq: &rosidl_runtime_rs::Sequence<Self>, out_seq: &mut rosidl_runtime_rs::Sequence<Self>) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_FeedbackMessage__Sequence__copy(in_seq, out_seq as *mut _) }
+  }
+}
+
+impl rosidl_runtime_rs::Message for NavigationGoal_FeedbackMessage {
+  type RmwMsg = Self;
+  fn into_rmw_message(msg_cow: std::borrow::Cow<'_, Self>) -> std::borrow::Cow<'_, Self::RmwMsg> { msg_cow }
+  fn from_rmw_message(msg: Self::RmwMsg) -> Self { msg }
+}
+
+impl rosidl_runtime_rs::RmwMessage for NavigationGoal_FeedbackMessage where Self: Sized {
+  const TYPE_NAME: &'static str = "interfaces_pkg/action/NavigationGoal_FeedbackMessage";
+  fn get_type_support() -> *const std::ffi::c_void {
+    // SAFETY: No preconditions for this function.
+    unsafe { rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_FeedbackMessage() }
+  }
+}
+
+
 
 
 #[link(name = "interfaces_pkg__rosidl_typesupport_c")]
@@ -1250,6 +1560,321 @@ impl rosidl_runtime_rs::RmwMessage for DumpBasket_GetResult_Response where Self:
 }
 
 
+#[link(name = "interfaces_pkg__rosidl_typesupport_c")]
+extern "C" {
+    fn rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_SendGoal_Request() -> *const std::ffi::c_void;
+}
+
+#[link(name = "interfaces_pkg__rosidl_generator_c")]
+extern "C" {
+    fn interfaces_pkg__action__NavigationGoal_SendGoal_Request__init(msg: *mut NavigationGoal_SendGoal_Request) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_SendGoal_Request__Sequence__init(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_SendGoal_Request>, size: usize) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_SendGoal_Request__Sequence__fini(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_SendGoal_Request>);
+    fn interfaces_pkg__action__NavigationGoal_SendGoal_Request__Sequence__copy(in_seq: &rosidl_runtime_rs::Sequence<NavigationGoal_SendGoal_Request>, out_seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_SendGoal_Request>) -> bool;
+}
+
+// Corresponds to interfaces_pkg__action__NavigationGoal_SendGoal_Request
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+
+
+// This struct is not documented.
+#[allow(missing_docs)]
+
+#[allow(non_camel_case_types)]
+#[repr(C)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct NavigationGoal_SendGoal_Request {
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub goal_id: unique_identifier_msgs::msg::rmw::UUID,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub goal: super::super::action::rmw::NavigationGoal_Goal,
+
+}
+
+
+
+impl Default for NavigationGoal_SendGoal_Request {
+  fn default() -> Self {
+    unsafe {
+      let mut msg = std::mem::zeroed();
+      if !interfaces_pkg__action__NavigationGoal_SendGoal_Request__init(&mut msg as *mut _) {
+        panic!("Call to interfaces_pkg__action__NavigationGoal_SendGoal_Request__init() failed");
+      }
+      msg
+    }
+  }
+}
+
+impl rosidl_runtime_rs::SequenceAlloc for NavigationGoal_SendGoal_Request {
+  fn sequence_init(seq: &mut rosidl_runtime_rs::Sequence<Self>, size: usize) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_SendGoal_Request__Sequence__init(seq as *mut _, size) }
+  }
+  fn sequence_fini(seq: &mut rosidl_runtime_rs::Sequence<Self>) {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_SendGoal_Request__Sequence__fini(seq as *mut _) }
+  }
+  fn sequence_copy(in_seq: &rosidl_runtime_rs::Sequence<Self>, out_seq: &mut rosidl_runtime_rs::Sequence<Self>) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_SendGoal_Request__Sequence__copy(in_seq, out_seq as *mut _) }
+  }
+}
+
+impl rosidl_runtime_rs::Message for NavigationGoal_SendGoal_Request {
+  type RmwMsg = Self;
+  fn into_rmw_message(msg_cow: std::borrow::Cow<'_, Self>) -> std::borrow::Cow<'_, Self::RmwMsg> { msg_cow }
+  fn from_rmw_message(msg: Self::RmwMsg) -> Self { msg }
+}
+
+impl rosidl_runtime_rs::RmwMessage for NavigationGoal_SendGoal_Request where Self: Sized {
+  const TYPE_NAME: &'static str = "interfaces_pkg/action/NavigationGoal_SendGoal_Request";
+  fn get_type_support() -> *const std::ffi::c_void {
+    // SAFETY: No preconditions for this function.
+    unsafe { rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_SendGoal_Request() }
+  }
+}
+
+
+#[link(name = "interfaces_pkg__rosidl_typesupport_c")]
+extern "C" {
+    fn rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_SendGoal_Response() -> *const std::ffi::c_void;
+}
+
+#[link(name = "interfaces_pkg__rosidl_generator_c")]
+extern "C" {
+    fn interfaces_pkg__action__NavigationGoal_SendGoal_Response__init(msg: *mut NavigationGoal_SendGoal_Response) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_SendGoal_Response__Sequence__init(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_SendGoal_Response>, size: usize) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_SendGoal_Response__Sequence__fini(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_SendGoal_Response>);
+    fn interfaces_pkg__action__NavigationGoal_SendGoal_Response__Sequence__copy(in_seq: &rosidl_runtime_rs::Sequence<NavigationGoal_SendGoal_Response>, out_seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_SendGoal_Response>) -> bool;
+}
+
+// Corresponds to interfaces_pkg__action__NavigationGoal_SendGoal_Response
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+
+
+// This struct is not documented.
+#[allow(missing_docs)]
+
+#[allow(non_camel_case_types)]
+#[repr(C)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct NavigationGoal_SendGoal_Response {
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub accepted: bool,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub stamp: builtin_interfaces::msg::rmw::Time,
+
+}
+
+
+
+impl Default for NavigationGoal_SendGoal_Response {
+  fn default() -> Self {
+    unsafe {
+      let mut msg = std::mem::zeroed();
+      if !interfaces_pkg__action__NavigationGoal_SendGoal_Response__init(&mut msg as *mut _) {
+        panic!("Call to interfaces_pkg__action__NavigationGoal_SendGoal_Response__init() failed");
+      }
+      msg
+    }
+  }
+}
+
+impl rosidl_runtime_rs::SequenceAlloc for NavigationGoal_SendGoal_Response {
+  fn sequence_init(seq: &mut rosidl_runtime_rs::Sequence<Self>, size: usize) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_SendGoal_Response__Sequence__init(seq as *mut _, size) }
+  }
+  fn sequence_fini(seq: &mut rosidl_runtime_rs::Sequence<Self>) {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_SendGoal_Response__Sequence__fini(seq as *mut _) }
+  }
+  fn sequence_copy(in_seq: &rosidl_runtime_rs::Sequence<Self>, out_seq: &mut rosidl_runtime_rs::Sequence<Self>) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_SendGoal_Response__Sequence__copy(in_seq, out_seq as *mut _) }
+  }
+}
+
+impl rosidl_runtime_rs::Message for NavigationGoal_SendGoal_Response {
+  type RmwMsg = Self;
+  fn into_rmw_message(msg_cow: std::borrow::Cow<'_, Self>) -> std::borrow::Cow<'_, Self::RmwMsg> { msg_cow }
+  fn from_rmw_message(msg: Self::RmwMsg) -> Self { msg }
+}
+
+impl rosidl_runtime_rs::RmwMessage for NavigationGoal_SendGoal_Response where Self: Sized {
+  const TYPE_NAME: &'static str = "interfaces_pkg/action/NavigationGoal_SendGoal_Response";
+  fn get_type_support() -> *const std::ffi::c_void {
+    // SAFETY: No preconditions for this function.
+    unsafe { rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_SendGoal_Response() }
+  }
+}
+
+
+#[link(name = "interfaces_pkg__rosidl_typesupport_c")]
+extern "C" {
+    fn rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_GetResult_Request() -> *const std::ffi::c_void;
+}
+
+#[link(name = "interfaces_pkg__rosidl_generator_c")]
+extern "C" {
+    fn interfaces_pkg__action__NavigationGoal_GetResult_Request__init(msg: *mut NavigationGoal_GetResult_Request) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_GetResult_Request__Sequence__init(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_GetResult_Request>, size: usize) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_GetResult_Request__Sequence__fini(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_GetResult_Request>);
+    fn interfaces_pkg__action__NavigationGoal_GetResult_Request__Sequence__copy(in_seq: &rosidl_runtime_rs::Sequence<NavigationGoal_GetResult_Request>, out_seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_GetResult_Request>) -> bool;
+}
+
+// Corresponds to interfaces_pkg__action__NavigationGoal_GetResult_Request
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+
+
+// This struct is not documented.
+#[allow(missing_docs)]
+
+#[allow(non_camel_case_types)]
+#[repr(C)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct NavigationGoal_GetResult_Request {
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub goal_id: unique_identifier_msgs::msg::rmw::UUID,
+
+}
+
+
+
+impl Default for NavigationGoal_GetResult_Request {
+  fn default() -> Self {
+    unsafe {
+      let mut msg = std::mem::zeroed();
+      if !interfaces_pkg__action__NavigationGoal_GetResult_Request__init(&mut msg as *mut _) {
+        panic!("Call to interfaces_pkg__action__NavigationGoal_GetResult_Request__init() failed");
+      }
+      msg
+    }
+  }
+}
+
+impl rosidl_runtime_rs::SequenceAlloc for NavigationGoal_GetResult_Request {
+  fn sequence_init(seq: &mut rosidl_runtime_rs::Sequence<Self>, size: usize) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_GetResult_Request__Sequence__init(seq as *mut _, size) }
+  }
+  fn sequence_fini(seq: &mut rosidl_runtime_rs::Sequence<Self>) {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_GetResult_Request__Sequence__fini(seq as *mut _) }
+  }
+  fn sequence_copy(in_seq: &rosidl_runtime_rs::Sequence<Self>, out_seq: &mut rosidl_runtime_rs::Sequence<Self>) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_GetResult_Request__Sequence__copy(in_seq, out_seq as *mut _) }
+  }
+}
+
+impl rosidl_runtime_rs::Message for NavigationGoal_GetResult_Request {
+  type RmwMsg = Self;
+  fn into_rmw_message(msg_cow: std::borrow::Cow<'_, Self>) -> std::borrow::Cow<'_, Self::RmwMsg> { msg_cow }
+  fn from_rmw_message(msg: Self::RmwMsg) -> Self { msg }
+}
+
+impl rosidl_runtime_rs::RmwMessage for NavigationGoal_GetResult_Request where Self: Sized {
+  const TYPE_NAME: &'static str = "interfaces_pkg/action/NavigationGoal_GetResult_Request";
+  fn get_type_support() -> *const std::ffi::c_void {
+    // SAFETY: No preconditions for this function.
+    unsafe { rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_GetResult_Request() }
+  }
+}
+
+
+#[link(name = "interfaces_pkg__rosidl_typesupport_c")]
+extern "C" {
+    fn rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_GetResult_Response() -> *const std::ffi::c_void;
+}
+
+#[link(name = "interfaces_pkg__rosidl_generator_c")]
+extern "C" {
+    fn interfaces_pkg__action__NavigationGoal_GetResult_Response__init(msg: *mut NavigationGoal_GetResult_Response) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_GetResult_Response__Sequence__init(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_GetResult_Response>, size: usize) -> bool;
+    fn interfaces_pkg__action__NavigationGoal_GetResult_Response__Sequence__fini(seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_GetResult_Response>);
+    fn interfaces_pkg__action__NavigationGoal_GetResult_Response__Sequence__copy(in_seq: &rosidl_runtime_rs::Sequence<NavigationGoal_GetResult_Response>, out_seq: *mut rosidl_runtime_rs::Sequence<NavigationGoal_GetResult_Response>) -> bool;
+}
+
+// Corresponds to interfaces_pkg__action__NavigationGoal_GetResult_Response
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+
+
+// This struct is not documented.
+#[allow(missing_docs)]
+
+#[allow(non_camel_case_types)]
+#[repr(C)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct NavigationGoal_GetResult_Response {
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub status: i8,
+
+
+    // This member is not documented.
+    #[allow(missing_docs)]
+    pub result: super::super::action::rmw::NavigationGoal_Result,
+
+}
+
+
+
+impl Default for NavigationGoal_GetResult_Response {
+  fn default() -> Self {
+    unsafe {
+      let mut msg = std::mem::zeroed();
+      if !interfaces_pkg__action__NavigationGoal_GetResult_Response__init(&mut msg as *mut _) {
+        panic!("Call to interfaces_pkg__action__NavigationGoal_GetResult_Response__init() failed");
+      }
+      msg
+    }
+  }
+}
+
+impl rosidl_runtime_rs::SequenceAlloc for NavigationGoal_GetResult_Response {
+  fn sequence_init(seq: &mut rosidl_runtime_rs::Sequence<Self>, size: usize) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_GetResult_Response__Sequence__init(seq as *mut _, size) }
+  }
+  fn sequence_fini(seq: &mut rosidl_runtime_rs::Sequence<Self>) {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_GetResult_Response__Sequence__fini(seq as *mut _) }
+  }
+  fn sequence_copy(in_seq: &rosidl_runtime_rs::Sequence<Self>, out_seq: &mut rosidl_runtime_rs::Sequence<Self>) -> bool {
+    // SAFETY: This is safe since the pointer is guaranteed to be valid/initialized.
+    unsafe { interfaces_pkg__action__NavigationGoal_GetResult_Response__Sequence__copy(in_seq, out_seq as *mut _) }
+  }
+}
+
+impl rosidl_runtime_rs::Message for NavigationGoal_GetResult_Response {
+  type RmwMsg = Self;
+  fn into_rmw_message(msg_cow: std::borrow::Cow<'_, Self>) -> std::borrow::Cow<'_, Self::RmwMsg> { msg_cow }
+  fn from_rmw_message(msg: Self::RmwMsg) -> Self { msg }
+}
+
+impl rosidl_runtime_rs::RmwMessage for NavigationGoal_GetResult_Response where Self: Sized {
+  const TYPE_NAME: &'static str = "interfaces_pkg/action/NavigationGoal_GetResult_Response";
+  fn get_type_support() -> *const std::ffi::c_void {
+    // SAFETY: No preconditions for this function.
+    unsafe { rosidl_typesupport_c__get_message_type_support_handle__interfaces_pkg__action__NavigationGoal_GetResult_Response() }
+  }
+}
+
+
 
 
 
@@ -1336,6 +1961,50 @@ impl rosidl_runtime_rs::Service for DumpBasket_GetResult {
     fn get_type_support() -> *const std::ffi::c_void {
         // SAFETY: No preconditions for this function.
         unsafe { rosidl_typesupport_c__get_service_type_support_handle__interfaces_pkg__action__DumpBasket_GetResult() }
+    }
+}
+
+
+
+
+#[link(name = "interfaces_pkg__rosidl_typesupport_c")]
+extern "C" {
+    fn rosidl_typesupport_c__get_service_type_support_handle__interfaces_pkg__action__NavigationGoal_SendGoal() -> *const std::ffi::c_void;
+}
+
+// Corresponds to interfaces_pkg__action__NavigationGoal_SendGoal
+#[allow(missing_docs, non_camel_case_types)]
+pub struct NavigationGoal_SendGoal;
+
+impl rosidl_runtime_rs::Service for NavigationGoal_SendGoal {
+    type Request = NavigationGoal_SendGoal_Request;
+    type Response = NavigationGoal_SendGoal_Response;
+
+    fn get_type_support() -> *const std::ffi::c_void {
+        // SAFETY: No preconditions for this function.
+        unsafe { rosidl_typesupport_c__get_service_type_support_handle__interfaces_pkg__action__NavigationGoal_SendGoal() }
+    }
+}
+
+
+
+
+#[link(name = "interfaces_pkg__rosidl_typesupport_c")]
+extern "C" {
+    fn rosidl_typesupport_c__get_service_type_support_handle__interfaces_pkg__action__NavigationGoal_GetResult() -> *const std::ffi::c_void;
+}
+
+// Corresponds to interfaces_pkg__action__NavigationGoal_GetResult
+#[allow(missing_docs, non_camel_case_types)]
+pub struct NavigationGoal_GetResult;
+
+impl rosidl_runtime_rs::Service for NavigationGoal_GetResult {
+    type Request = NavigationGoal_GetResult_Request;
+    type Response = NavigationGoal_GetResult_Response;
+
+    fn get_type_support() -> *const std::ffi::c_void {
+        // SAFETY: No preconditions for this function.
+        unsafe { rosidl_typesupport_c__get_service_type_support_handle__interfaces_pkg__action__NavigationGoal_GetResult() }
     }
 }
 

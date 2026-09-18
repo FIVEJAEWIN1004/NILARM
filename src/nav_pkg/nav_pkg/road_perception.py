@@ -1,0 +1,1122 @@
+#!/usr/bin/env python3
+
+"""Temporal blue-road boundary perception for the KSAM Pinky Pro course."""
+
+from dataclasses import dataclass
+import math
+import time
+
+import cv2
+from interfaces_pkg.msg import RoadModel
+import numpy as np
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
+from sensor_msgs.msg import CompressedImage
+from std_msgs.msg import Float32
+
+
+@dataclass
+class BoundaryFit:
+    track_id: int
+    coefficients: np.ndarray
+    points: list
+    residual: float
+    coverage: float
+
+    def x_at(self, y_normalized):
+        return float(np.polyval(self.coefficients, y_normalized))
+
+
+class RoadPerception(Node):
+    """Estimate temporally consistent left/right boundaries and road center."""
+
+    BRANCH_EXTRA_BOUNDARY = 1
+
+    def __init__(self):
+        super().__init__('road_perception')
+
+        self.hsv_lower = np.array(
+            self.declare_parameter('hsv_lower', [24, 55, 130]).value,
+            dtype=np.uint8,
+        )
+        self.hsv_upper = np.array(
+            self.declare_parameter('hsv_upper', [45, 170, 230]).value,
+            dtype=np.uint8,
+        )
+        self.roi_start = float(self.declare_parameter('roi_start', 0.35).value)
+        self.scan_line_count = int(
+            self.declare_parameter('scan_line_count', 12).value
+        )
+        self.scan_band_height = int(
+            self.declare_parameter('scan_band_height', 7).value
+        )
+        self.minimum_segment_width = int(
+            self.declare_parameter('minimum_segment_width', 4).value
+        )
+        self.initial_lane_width = float(
+            self.declare_parameter('lane_width_initial_px', 390.0).value
+        )
+        self.lane_width_alpha = float(
+            self.declare_parameter('lane_width_ema_alpha', 0.15).value
+        )
+        self.detection_timeout = float(
+            self.declare_parameter('detection_timeout', 0.5).value
+        )
+        self.confidence_threshold = float(
+            self.declare_parameter('confidence_threshold', 0.35).value
+        )
+        self.debug = bool(self.declare_parameter('debug', False).value)
+        self.debug_display = bool(
+            self.declare_parameter('debug_display', True).value
+        )
+        self.camera_flip = bool(
+            self.declare_parameter('camera_flip', True).value
+        )
+
+        # Supporting tuning parameters remain configurable for camera changes.
+        self.min_track_points = int(
+            self.declare_parameter('min_track_points', 4).value
+        )
+        self.max_track_jump_ratio = float(
+            self.declare_parameter('max_track_jump_ratio', 0.28).value
+        )
+        self.min_lane_width_ratio = float(
+            self.declare_parameter('min_lane_width_ratio', 0.55).value
+        )
+        self.max_lane_width_ratio = float(
+            self.declare_parameter('max_lane_width_ratio', 1.65).value
+        )
+        self.center_ema_alpha = float(
+            self.declare_parameter('center_ema_alpha', 0.35).value
+        )
+
+        self.model_publisher = self.create_publisher(RoadModel, '/road/model', 10)
+        self.legacy_publisher = self.create_publisher(Float32, '/line_error', 10)
+        self.debug_publisher = self.create_publisher(
+            CompressedImage, '/road/debug_image/compressed', 1
+        )
+        self.create_subscription(
+            CompressedImage,
+            '/camera/image/compressed',
+            self.image_callback,
+            qos_profile_sensor_data,
+        )
+
+        self.lane_width_px = self.initial_lane_width
+        # W(y) = slope * normalized_roi_y + intercept. It is learned only
+        # from scan levels where both selected boundaries were observed.
+        self.lane_width_model = None
+        self.lane_width_learned = False
+        self.previous_left = None
+        self.previous_right = None
+        self.previous_center = None
+        self.last_valid = None
+        self.last_valid_time = 0.0
+        self.gui_available = True
+        self.last_diagnostic_log_time = 0.0
+        self.mouse_callback_registered = False
+        self.click_bgr_image = None
+        self.click_hsv_image = None
+        self.click_roi_y = 0
+        self.click_samples = []
+
+        self.get_logger().info('NILARM road perception started (no cmd_vel output)')
+
+    @staticmethod
+    def _segments(row, minimum_width):
+        """Return (center, width) for contiguous non-zero runs in a binary row."""
+        padded = np.pad(row > 0, (1, 1), constant_values=False).astype(np.int8)
+        edges = np.diff(padded)
+        starts = np.flatnonzero(edges == 1)
+        ends = np.flatnonzero(edges == -1)
+        return [
+            ((float(start + end - 1) / 2.0), int(end - start))
+            for start, end in zip(starts, ends)
+            if end - start >= minimum_width
+        ]
+
+    def _scan_candidates(self, mask):
+        """
+        Extract road-boundary candidates from horizontal scan bands.
+
+        STOP letters / horizontal floor markings can satisfy the HSV mask.
+        A real road boundary should have vertical support around a candidate,
+        so candidates with weak vertical continuity are rejected.
+        """
+        height, width = mask.shape
+        margin = max(self.scan_band_height, 2)
+        ys = np.linspace(margin, height - margin - 1, self.scan_line_count)
+
+        levels = []
+        scan_diagnostics = []
+
+        # Vertical-support test parameters.
+        # Keep these conservative so curved lane boundaries are not removed.
+        vertical_half = max(6, int(round(height * 0.035)))
+        x_half = max(2, self.minimum_segment_width // 2)
+        min_vertical_ratio = 0.28
+
+        for y in ys[::-1]:  # build tracks from near (bottom) to far (top)
+            yi = int(round(y))
+
+            half = max(1, self.scan_band_height // 2)
+            band = mask[
+                max(0, yi - half):
+                min(height, yi + half + 1)
+            ]
+            projection = np.max(band, axis=0)
+
+            all_segments = self._segments(projection, 1)
+
+            candidates = []
+            rejected_widths = []
+            rejected_candidates = []
+
+            for center_x, segment_width in all_segments:
+                xi = int(round(center_x))
+
+                # Compute support for diagnostics on every raw segment. The
+                # existing width gate still decides first below.
+                y0 = max(0, yi - vertical_half)
+                y1 = min(height, yi + vertical_half + 1)
+                x0 = max(0, xi - x_half)
+                x1 = min(width, xi + x_half + 1)
+                vertical_patch = mask[y0:y1, x0:x1]
+                vertical_ratio = 0.0
+                if vertical_patch.size:
+                    row_support = np.any(vertical_patch > 0, axis=1)
+                    vertical_ratio = float(np.mean(row_support))
+
+                if segment_width < self.minimum_segment_width:
+                    rejected_widths.append(segment_width)
+                    rejected_candidates.append({
+                        'x': center_x,
+                        'width': segment_width,
+                        'vertical_ratio': vertical_ratio,
+                        'reason': 'MINIMUM_WIDTH',
+                    })
+                    continue
+
+                # Examine a narrow vertical strip around the segment center.
+                if vertical_patch.size == 0:
+                    rejected_widths.append(segment_width)
+                    rejected_candidates.append({
+                        'x': center_x,
+                        'width': segment_width,
+                        'vertical_ratio': 0.0,
+                        'reason': 'VERTICAL_SUPPORT',
+                    })
+                    continue
+
+                # For each image row, ask whether the candidate exists somewhere
+                # inside this narrow x window. Vertical lane edges should survive
+                # across many rows; STOP/horizontal markings usually should not.
+                if vertical_ratio < min_vertical_ratio:
+                    rejected_widths.append(segment_width)
+                    rejected_candidates.append({
+                        'x': center_x,
+                        'width': segment_width,
+                        'vertical_ratio': vertical_ratio,
+                        'reason': 'VERTICAL_SUPPORT',
+                    })
+                    continue
+
+                candidates.append((center_x, segment_width))
+
+            levels.append((yi, candidates))
+            scan_diagnostics.append({
+                'y': yi,
+                'raw_segment_count': len(all_segments),
+                'segments': candidates,
+                'rejected_widths': rejected_widths,
+                'rejected_candidates': rejected_candidates,
+            })
+
+        return levels, scan_diagnostics
+
+    def _build_tracks(self, levels, roi_height):
+        """Connect segments between adjacent scan levels by minimum x motion."""
+        tracks = []
+        assignments = []
+        link_diagnostics = []
+        next_track_id = 0
+        max_jump = max(20.0, self.lane_width_px * self.max_track_jump_ratio)
+        for yi, candidates in levels:
+            y_norm = yi / max(1.0, float(roi_height - 1))
+            unused = set(range(len(candidates)))
+            active = [t for t in tracks if t['misses'] <= 1]
+            pairs = []
+            for track_index, track in enumerate(active):
+                predicted_x = track['points'][-1][1]
+                if len(track['points']) >= 2:
+                    y1, x1 = track['points'][-2]
+                    y2, x2 = track['points'][-1]
+                    if abs(y2 - y1) > 1e-6:
+                        predicted_x = x2 + (x2 - x1) * (y_norm - y2) / (y2 - y1)
+                for candidate_index, (x, _) in enumerate(candidates):
+                    distance = abs(x - predicted_x)
+
+                    # STOP/horizontal markings can intersect a real road boundary.
+                    # Once a track has a direction, require the next candidate to
+                    # stay reasonably close to its predicted continuation.
+                    #
+                    # Keep the first links permissive so a genuine sharp curve can
+                    # establish its direction before this gate becomes active.
+                    link_gate = max_jump
+                    if len(track['points']) >= 3:
+                        link_gate = min(
+                            max_jump,
+                            max(35.0, 0.18 * self.lane_width_px),
+                        )
+
+                    link_diagnostics.append({
+                        'y': yi,
+                        'track_id': track['id'],
+                        'predicted_x': float(predicted_x),
+                        'candidate_x': float(x),
+                        'distance': float(distance),
+                        'link_gate': float(link_gate),
+                        'rejected': distance > link_gate,
+                    })
+                    if distance <= link_gate:
+                        pairs.append((distance, track_index, candidate_index))
+
+            assigned_tracks = set()
+            for link_distance, active_index, candidate_index in sorted(pairs):
+                track = active[active_index]
+                identity = id(track)
+                if identity in assigned_tracks or candidate_index not in unused:
+                    continue
+                track['points'].append((y_norm, candidates[candidate_index][0]))
+                track['misses'] = 0
+                assigned_tracks.add(identity)
+                unused.remove(candidate_index)
+                assignments.append({
+                    'y': yi,
+                    'x': candidates[candidate_index][0],
+                    'track_id': track['id'],
+                    'distance': float(link_distance),
+                    'new': False,
+                })
+
+            for track in tracks:
+                if id(track) not in assigned_tracks:
+                    track['misses'] += 1
+                    track['failed_scan_ys'].append(yi)
+            for candidate_index in unused:
+                track = {
+                    'id': next_track_id,
+                    'points': [(y_norm, candidates[candidate_index][0])],
+                    'misses': 0,
+                    'failed_scan_ys': [],
+                }
+                tracks.append(track)
+                assignments.append({
+                    'y': yi,
+                    'x': candidates[candidate_index][0],
+                    'track_id': next_track_id,
+                    'distance': None,
+                    'new': True,
+                })
+                next_track_id += 1
+        return tracks, assignments, max_jump, link_diagnostics
+
+    def _fit_tracks(self, tracks):
+        fits = []
+        diagnostics = []
+        for track in tracks:
+            points = track['points']
+            if len(points) < self.min_track_points:
+                diagnostics.append({
+                    'track_id': track['id'],
+                    'points': len(points),
+                    'success': False,
+                    'reason': f'MIN_POINTS<{self.min_track_points}',
+                })
+                continue
+            ys = np.array([point[0] for point in points])
+            xs = np.array([point[1] for point in points])
+            degree = 2 if len(points) >= 6 else 1
+            try:
+                coefficients = np.polyfit(ys, xs, degree)
+            except (ValueError, np.linalg.LinAlgError) as error:
+                diagnostics.append({
+                    'track_id': track['id'],
+                    'points': len(points),
+                    'success': False,
+                    'reason': f'POLYFIT:{type(error).__name__}',
+                })
+                continue
+            predicted = np.polyval(coefficients, ys)
+            residual = float(np.sqrt(np.mean((xs - predicted) ** 2)))
+            fits.append(BoundaryFit(
+                track_id=track['id'],
+                coefficients=coefficients,
+                points=points,
+                residual=residual,
+                coverage=min(1.0, len(points) / max(1.0, self.scan_line_count)),
+            ))
+            diagnostics.append({
+                'track_id': track['id'],
+                'points': len(points),
+                'success': True,
+                'degree': degree,
+                'residual': residual,
+            })
+        return fits, diagnostics
+
+    def _temporal_distance(self, fit, previous):
+        if previous is None:
+            return 0.5
+        samples = np.array([0.25, 0.55, 0.85])
+        distance = np.mean(np.abs(
+            np.polyval(fit.coefficients, samples)
+            - np.polyval(previous, samples)
+        ))
+        return min(1.0, float(distance) / max(1.0, self.lane_width_px * 0.5))
+
+    @staticmethod
+    def _overlap_width_samples(left, right):
+        """Return observed R(y)-L(y) samples at shared scan levels."""
+        left_by_y = {round(y, 6): x for y, x in left.points}
+        right_by_y = {round(y, 6): x for y, x in right.points}
+        common_y = sorted(set(left_by_y).intersection(right_by_y))
+        return [
+            (y, float(right_by_y[y] - left_by_y[y]))
+            for y in common_y
+        ]
+
+    @staticmethod
+    def _fit_width_model(width_samples):
+        ys = np.array([sample[0] for sample in width_samples])
+        widths = np.array([sample[1] for sample in width_samples])
+        if len(width_samples) >= 2:
+            return np.polyfit(ys, widths, 1)
+        return np.array([0.0, widths[0]])
+
+    def _select_boundaries(self, fits):
+        """Choose a pair using widths measured only in its observed overlap."""
+        best = None
+        pair_diagnostics = []
+        single_side_diagnostic = {
+            'left_temporal_distance': None,
+            'right_temporal_distance': None,
+            'temporal_gate': 0.65,
+        }
+        for left in fits:
+            for right in fits:
+                width_samples = self._overlap_width_samples(left, right)
+                widths = [sample[1] for sample in width_samples]
+                if not widths or any(width <= 0.0 for width in widths):
+                    continue
+                median_width = float(np.median(widths))
+                minimum_samples = max(3, self.min_track_points // 2)
+                sorted_samples = sorted(width_samples)
+                differences = np.diff([sample[1] for sample in sorted_samples])
+                trend_tolerance = 0.05 * median_width
+                trend_score = (
+                    float(np.mean(differences >= -trend_tolerance))
+                    if len(differences) else 0.0
+                )
+                width_model = self._fit_width_model(width_samples)
+                modeled = np.polyval(
+                    width_model,
+                    np.array([sample[0] for sample in width_samples]),
+                )
+                width_residual = float(np.sqrt(np.mean(
+                    (np.array(widths) - modeled) ** 2
+                )))
+                diagnostic = {
+                    'left': left.track_id,
+                    'right': right.track_id,
+                    'width': median_width,
+                    'widths': widths,
+                    'sample_count': len(widths),
+                    'width_model': width_model,
+                    'width_residual': width_residual,
+                    'trend_score': trend_score,
+                    'score': None,
+                    'reason': 'VALID',
+                    'width_valid': False,
+                }
+                if len(widths) < minimum_samples:
+                    diagnostic['reason'] = 'WIDTH_SAMPLE_COUNT'
+                    pair_diagnostics.append(diagnostic)
+                    continue
+                if not (
+                    self.lane_width_px * self.min_lane_width_ratio
+                    <= median_width
+                    <= self.lane_width_px * self.max_lane_width_ratio
+                ):
+                    diagnostic['reason'] = 'WIDTH_GATE'
+                    pair_diagnostics.append(diagnostic)
+                    continue
+                if trend_score < 0.5:
+                    diagnostic['reason'] = 'PERSPECTIVE_TREND'
+                    pair_diagnostics.append(diagnostic)
+                    continue
+
+                # Reject pairs whose apparent lane width changes unrealistically
+                # fast through the ROI. This helps prevent horizontal STOP/STATION
+                # markings from being linked into fake left/right road boundaries.
+                width_slope = float(width_model[0])
+                max_width_slope = 1000.0
+                if width_slope < -50.0 or width_slope > max_width_slope:
+                    diagnostic['reason'] = 'WIDTH_SLOPE_GATE'
+                    pair_diagnostics.append(diagnostic)
+                    continue
+
+                width_error = abs(median_width - self.lane_width_px) / max(
+                    1.0, self.lane_width_px
+                )
+                residual_score = min(1.0, (left.residual + right.residual) / 30.0)
+                temporal = 0.5 * (
+                    self._temporal_distance(left, self.previous_left)
+                    + self._temporal_distance(right, self.previous_right)
+                )
+                coverage = 0.5 * (left.coverage + right.coverage)
+                width_shape_score = min(
+                    1.0, width_residual / max(1.0, median_width * 0.12)
+                )
+                score = (
+                    2.2 * temporal + 1.2 * width_error + residual_score
+                    + 0.5 * width_shape_score + 0.5 * (1.0 - trend_score)
+                    - coverage
+                )
+                diagnostic['score'] = score
+                diagnostic['width_valid'] = True
+                pair_diagnostics.append(diagnostic)
+                if best is None or score < best[0]:
+                    best = (
+                        score, left, right, median_width, width_model, diagnostic
+                    )
+
+        if best is not None:
+            return (
+                best[1], best[2], best[3], best[4], pair_diagnostics,
+                best[0], best[5], single_side_diagnostic,
+            )
+
+        diagnostic_focus = None
+        if pair_diagnostics:
+            diagnostic_focus = min(
+                pair_diagnostics,
+                key=lambda item: (
+                    abs(item['width'] - self.lane_width_px),
+                    -item['sample_count'],
+                ),
+            )
+
+        # A lone boundary is assigned only through temporal identity. We do not
+        # classify it merely by which half of the image it occupies.
+        if not self.lane_width_learned or not fits:
+            return (
+                None, None, None, None, pair_diagnostics, None,
+                diagnostic_focus, single_side_diagnostic,
+            )
+        left_fit = min(fits, key=lambda fit: self._temporal_distance(fit, self.previous_left))
+        right_fit = min(fits, key=lambda fit: self._temporal_distance(fit, self.previous_right))
+        left_distance = self._temporal_distance(left_fit, self.previous_left)
+        right_distance = self._temporal_distance(right_fit, self.previous_right)
+        gate = 0.65
+        single_side_diagnostic.update({
+            'left_temporal_distance': left_distance,
+            'right_temporal_distance': right_distance,
+            'temporal_gate': gate,
+        })
+        if left_distance < right_distance and left_distance < gate:
+            return (
+                left_fit, None, None, None, pair_diagnostics, left_distance,
+                diagnostic_focus, single_side_diagnostic,
+            )
+        if right_distance < gate:
+            return (
+                None, right_fit, None, None, pair_diagnostics, right_distance,
+                diagnostic_focus, single_side_diagnostic,
+            )
+        return (
+            None, None, None, None, pair_diagnostics, None, diagnostic_focus,
+            single_side_diagnostic,
+        )
+
+    @staticmethod
+    def _pad_quadratic(coefficients):
+        return np.pad(coefficients, (3 - len(coefficients), 0), constant_values=0.0)
+
+    def _center_coefficients(self, left, right):
+        left_coeff = self._pad_quadratic(left.coefficients) if left else None
+        right_coeff = self._pad_quadratic(right.coefficients) if right else None
+        if left_coeff is not None and right_coeff is not None:
+            return 0.5 * (left_coeff + right_coeff), False
+        if left_coeff is not None and self.lane_width_learned:
+            width_coeff = np.array([0.0, *self.lane_width_model])
+            center = left_coeff + 0.5 * width_coeff
+            return center, True
+        if right_coeff is not None and self.lane_width_learned:
+            width_coeff = np.array([0.0, *self.lane_width_model])
+            center = right_coeff - 0.5 * width_coeff
+            return center, True
+        return None, False
+
+    def _confidence(self, left, right, measured_width):
+        detected = [fit for fit in (left, right) if fit is not None]
+        if not detected:
+            return 0.0
+        coverage = sum(fit.coverage for fit in detected) / len(detected)
+        side_score = 1.0 if len(detected) == 2 else 0.62
+        mean_residual = sum(fit.residual for fit in detected) / len(detected)
+        residual_score = math.exp(-mean_residual / 18.0)
+        width_score = 0.72
+        if measured_width is not None:
+            width_error = abs(measured_width - self.lane_width_px) / max(1.0, self.lane_width_px)
+            width_score = max(0.0, 1.0 - width_error / 0.45)
+        temporal_score = 1.0 - sum(
+            self._temporal_distance(fit, previous)
+            for fit, previous in ((left, self.previous_left), (right, self.previous_right))
+            if fit is not None
+        ) / len(detected)
+        confidence = (
+            0.30 * coverage
+            + 0.20 * side_score
+            + 0.20 * residual_score
+            + 0.15 * width_score
+            + 0.15 * temporal_score
+        )
+        return float(np.clip(confidence, 0.0, 1.0))
+
+    def _publish_lost_or_prediction(self, header, now, image_width, debug_data):
+        elapsed = now - self.last_valid_time
+        if self.last_valid is not None and elapsed <= self.detection_timeout:
+            msg = RoadModel()
+            msg.header = header
+            for field in (
+                'left_x', 'right_x', 'center_x', 'image_center_x', 'lane_width_px',
+                'lateral_error_px', 'heading_error_rad', 'curvature', 'branch_flags',
+            ):
+                setattr(msg, field, getattr(self.last_valid, field))
+            msg.left_detected = False
+            msg.right_detected = False
+            msg.center_valid = True
+            msg.predicted = True
+            msg.confidence = float(np.clip(
+                self.last_valid.confidence * (1.0 - elapsed / self.detection_timeout),
+                0.0,
+                1.0,
+            ))
+            self.model_publisher.publish(msg)
+            self.legacy_publisher.publish(Float32(data=msg.lateral_error_px))
+            debug_data['status'] = 'PREDICTED'
+            debug_data['message'] = msg
+            return msg
+
+        msg = RoadModel()
+        msg.header = header
+        msg.image_center_x = image_width / 2.0
+        msg.lane_width_px = self.lane_width_px
+        msg.center_valid = False
+        msg.predicted = False
+        msg.confidence = 0.0
+        self.model_publisher.publish(msg)
+        debug_data['status'] = 'LOST'
+        debug_data['message'] = msg
+        return msg
+
+    def image_callback(self, compressed):
+        frame = cv2.imdecode(
+            np.frombuffer(compressed.data, dtype=np.uint8), cv2.IMREAD_COLOR
+        )
+        if frame is None:
+            self.get_logger().warning('Failed to decode compressed camera image')
+            return
+        if self.camera_flip:
+            frame = cv2.flip(frame, -1)
+
+        height, width = frame.shape[:2]
+        roi_y = int(np.clip(self.roi_start, 0.0, 0.9) * height)
+        roi = frame[roi_y:, :]
+        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, self.hsv_lower, self.hsv_upper)
+        kernel = np.ones((5, 5), dtype=np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+        levels, scan_diagnostics = self._scan_candidates(mask)
+        tracks, assignments, max_jump, link_diagnostics = self._build_tracks(
+            levels, roi.shape[0]
+        )
+        fits, fit_diagnostics = self._fit_tracks(tracks)
+        (
+            left, right, measured_width, measured_width_model,
+            pair_diagnostics, best_score, selected_width_diagnostic,
+            single_side_diagnostic,
+        ) = (
+            self._select_boundaries(fits)
+        )
+        center_coeff, single_side = self._center_coefficients(left, right)
+
+        valid_tracks = len(fits)
+        levels_with_extra = sum(1 for _, candidates in levels if len(candidates) > 2)
+        branch = valid_tracks > 2 or levels_with_extra >= max(2, self.scan_line_count // 4)
+        debug_data = {
+            'levels': levels,
+            'scan_diagnostics': scan_diagnostics,
+            'tracks': tracks,
+            'assignments': assignments,
+            'link_diagnostics': link_diagnostics,
+            'fit_diagnostics': fit_diagnostics,
+            'pair_diagnostics': pair_diagnostics,
+            'best_score': best_score,
+            'selected_width_diagnostic': selected_width_diagnostic,
+            'single_side_diagnostic': single_side_diagnostic,
+            'max_jump': max_jump,
+            'roi_y': roi_y,
+            'roi_height': roi.shape[0],
+            'fits': fits,
+            'left': left,
+            'right': right,
+            'center': center_coeff,
+            'branch': branch,
+        }
+        now = time.monotonic()
+
+        if center_coeff is None:
+            if not any(item['segments'] for item in scan_diagnostics):
+                debug_data['reject_reason'] = 'NO_SCAN_SEGMENTS'
+            elif not fits:
+                debug_data['reject_reason'] = 'NO_VALID_TRACKS'
+            else:
+                debug_data['reject_reason'] = 'NO_VALID_PAIR_OR_TEMPORAL_SINGLE'
+            msg = self._publish_lost_or_prediction(
+                compressed.header, now, width, debug_data
+            )
+            if self.debug:
+                self._publish_debug(roi, mask, debug_data)
+                self._log_diagnostics(debug_data)
+            return
+
+        confidence = self._confidence(left, right, measured_width)
+        if confidence < self.confidence_threshold:
+            debug_data['confidence_before_reject'] = confidence
+            debug_data['reject_reason'] = (
+                f'LOW_CONFIDENCE<{self.confidence_threshold:.2f}'
+            )
+            msg = self._publish_lost_or_prediction(
+                compressed.header, now, width, debug_data
+            )
+            if self.debug:
+                self._publish_debug(roi, mask, debug_data)
+                self._log_diagnostics(debug_data)
+            return
+
+        if measured_width is not None:
+            alpha = float(np.clip(self.lane_width_alpha, 0.0, 1.0))
+            self.lane_width_px = (
+                alpha * measured_width + (1.0 - alpha) * self.lane_width_px
+            )
+            if self.lane_width_model is None:
+                self.lane_width_model = measured_width_model.copy()
+            else:
+                self.lane_width_model = (
+                    alpha * measured_width_model
+                    + (1.0 - alpha) * self.lane_width_model
+                )
+            self.lane_width_learned = True
+
+        if self.previous_center is not None:
+            alpha = float(np.clip(self.center_ema_alpha, 0.0, 1.0))
+            center_coeff = (
+                alpha * center_coeff
+                + (1.0 - alpha) * self._pad_quadratic(self.previous_center)
+            )
+
+        reference_y = 0.82
+        # Keep steering heading local to the robot.  The previous far sample at
+        # y=0.28 let a distant corner dominate the centerline chord and caused
+        # the controller to turn while the near-field road was still straight.
+        heading_forward_y = 0.62
+        center_x = float(np.polyval(center_coeff, reference_y))
+        heading_forward_x = float(np.polyval(center_coeff, heading_forward_y))
+        image_center_x = width / 2.0
+
+        # Positive errors mean the road points/is displaced to robot-left.
+        lateral_error = image_center_x - center_x
+        dx_near_minus_forward = center_x - heading_forward_x
+        dy_near_minus_forward = (
+            reference_y - heading_forward_y
+        ) * roi.shape[0]
+        heading_error = -math.atan2(
+            dx_near_minus_forward, dy_near_minus_forward
+        )
+
+        # Calibration-free curvature proxy: signed centerline second derivative,
+        # normalized by learned lane width. Positive means bending left.
+        quadratic = self._pad_quadratic(center_coeff)
+        curvature_proxy = -2.0 * float(quadratic[0]) / max(1.0, self.lane_width_px)
+
+        msg = RoadModel()
+        msg.header = compressed.header
+        msg.left_detected = left is not None
+        msg.right_detected = right is not None
+        msg.center_valid = True
+        msg.predicted = single_side
+        reference_width = (
+            float(np.polyval(self.lane_width_model, reference_y))
+            if self.lane_width_model is not None else self.lane_width_px
+        )
+        msg.left_x = (
+            left.x_at(reference_y) if left else center_x - 0.5 * reference_width
+        )
+        msg.right_x = (
+            right.x_at(reference_y) if right else center_x + 0.5 * reference_width
+        )
+        msg.center_x = center_x
+        msg.image_center_x = image_center_x
+        msg.lane_width_px = self.lane_width_px
+        msg.lateral_error_px = lateral_error
+        msg.heading_error_rad = heading_error
+        msg.curvature = curvature_proxy
+        msg.confidence = confidence
+        msg.branch_flags = self.BRANCH_EXTRA_BOUNDARY if branch else 0
+
+        self.model_publisher.publish(msg)
+        self.legacy_publisher.publish(Float32(data=msg.lateral_error_px))
+        self.previous_left = left.coefficients.copy() if left else self.previous_left
+        self.previous_right = right.coefficients.copy() if right else self.previous_right
+        self.previous_center = center_coeff.copy()
+        self.last_valid = msg
+        self.last_valid_time = now
+
+        if left and right:
+            debug_data['status'] = 'BOTH'
+        elif left:
+            debug_data['status'] = 'LEFT ONLY'
+        else:
+            debug_data['status'] = 'RIGHT ONLY'
+        debug_data['message'] = msg
+        debug_data['center'] = center_coeff
+        debug_data['confidence_before_reject'] = confidence
+        debug_data['reject_reason'] = 'NONE'
+        if self.debug:
+            self._publish_debug(roi, mask, debug_data)
+            self._log_diagnostics(debug_data)
+
+    @staticmethod
+    def _track_color(track_id):
+        palette = (
+            (255, 128, 0), (255, 0, 128), (128, 255, 0), (0, 128, 255),
+            (128, 0, 255), (0, 255, 128), (255, 255, 0), (255, 0, 255),
+        )
+        return palette[track_id % len(palette)]
+
+    @staticmethod
+    def _format_pair(candidate):
+        pair = f"T{candidate['left']}-T{candidate['right']}"
+        width = (
+            f"median={candidate['width']:.1f} n={candidate['sample_count']} "
+            f"trend={candidate['trend_score']:.2f}"
+        )
+        if candidate['score'] is None:
+            return f"{pair} {width} {candidate['reason']}"
+        return f"{pair} {width} s={candidate['score']:.2f}"
+
+    def _log_diagnostics(self, data):
+        now = time.monotonic()
+        if now - self.last_diagnostic_log_time < 1.0:
+            return
+        self.last_diagnostic_log_time = now
+
+        scan_summary = [
+            {
+                'y': item['y'],
+                'raw': item['raw_segment_count'],
+                'x': [round(segment[0], 1) for segment in item['segments']],
+                'minimum_width_rejects': [
+                    {
+                        'x': round(candidate['x'], 1),
+                        'width': candidate['width'],
+                        'vertical_ratio': round(
+                            candidate['vertical_ratio'], 3
+                        ),
+                    }
+                    for candidate in item['rejected_candidates']
+                    if candidate['reason'] == 'MINIMUM_WIDTH'
+                ],
+                'vertical_support_rejects': [
+                    {
+                        'x': round(candidate['x'], 1),
+                        'width': candidate['width'],
+                        'vertical_ratio': round(
+                            candidate['vertical_ratio'], 3
+                        ),
+                    }
+                    for candidate in item['rejected_candidates']
+                    if candidate['reason'] == 'VERTICAL_SUPPORT'
+                ],
+            }
+            for item in data['scan_diagnostics']
+        ]
+        link_summary = [
+            (
+                f"y={item['y']} T{item['track_id']} "
+                f"pred={item['predicted_x']:.1f} cand={item['candidate_x']:.1f} "
+                f"dist={item['distance']:.1f} gate={item['link_gate']:.1f} "
+                f"{'REJECT' if item['rejected'] else 'PASS'}"
+            )
+            for item in data['link_diagnostics']
+        ]
+        track_summary = [
+            f"T{track['id']}:{len(track['points'])}pts "
+            f"failed_y={track['failed_scan_ys']}"
+            for track in data['tracks']
+        ]
+        fit_summary = [
+            (
+                f"T{item['track_id']}:{item['points']}pts/"
+                + (f"FIT r={item['residual']:.1f}" if item['success'] else item['reason'])
+            )
+            for item in data['fit_diagnostics']
+        ]
+        pair_summary = [
+            self._format_pair(candidate)
+            for candidate in data['pair_diagnostics']
+        ]
+        selected = 'NONE'
+        if data.get('left') is not None or data.get('right') is not None:
+            left_id = data['left'].track_id if data.get('left') else '-'
+            right_id = data['right'].track_id if data.get('right') else '-'
+            selected = f'L=T{left_id} R=T{right_id} score={data.get("best_score")}'
+        confidence = data.get(
+            'confidence_before_reject', data['message'].confidence
+        )
+        width_diagnostic = data.get('selected_width_diagnostic')
+        overlap_widths = []
+        median_width = float('nan')
+        width_model = 'NONE'
+        width_valid = False
+        if width_diagnostic is not None:
+            overlap_widths = [
+                round(width, 1) for width in width_diagnostic['widths']
+            ]
+            median_width = width_diagnostic['width']
+            coefficients = width_diagnostic['width_model']
+            width_model = f'{coefficients[0]:.2f}*y + {coefficients[1]:.2f}'
+            width_valid = width_diagnostic['width_valid']
+        single_side = data['single_side_diagnostic']
+        left_temporal = single_side['left_temporal_distance']
+        right_temporal = single_side['right_temporal_distance']
+        left_temporal_text = (
+            'N/A' if left_temporal is None else f'{left_temporal:.3f}'
+        )
+        right_temporal_text = (
+            'N/A' if right_temporal is None else f'{right_temporal:.3f}'
+        )
+        self.get_logger().info(
+            f"ROI: y={data['roi_y']} height={data['roi_height']} "
+            f"scan_y={[item['y'] for item in data['scan_diagnostics']]}\n"
+            f'SCAN SEGMENTS: {scan_summary}\n'
+            f'LINK CANDIDATES: {link_summary}\n'
+            f"TRACKS: {len(data['tracks'])} {track_summary} "
+            f"max_jump={data['max_jump']:.1f}px\n"
+            f"VALID TRACKS: {len(data['fits'])} {fit_summary}\n"
+            f'PAIR CANDIDATES: {pair_summary}\n'
+            f'BEST PAIR: {selected}\n'
+            f'OVERLAP WIDTHS: {overlap_widths}\n'
+            f'MEDIAN WIDTH: {median_width:.1f}px\n'
+            f'WIDTH MODEL: W(y)={width_model} (normalized ROI y)\n'
+            f'WIDTH VALID: {width_valid}\n'
+            f'SINGLE-SIDE TEMPORAL: left={left_temporal_text} '
+            f'right={right_temporal_text} '
+            f"gate={single_side['temporal_gate']:.3f}\n"
+            f'CONFIDENCE: {confidence:.3f} threshold={self.confidence_threshold:.3f}\n'
+            f"REJECT REASON: {data.get('reject_reason', 'UNKNOWN')}\n"
+            f"MODE: {data.get('status', 'UNKNOWN')}"
+        )
+
+    def _draw_fit(self, image, fit, color, thickness=2):
+        if fit is None:
+            return
+        height = image.shape[0]
+        ys = np.linspace(0.05, 0.98, 60)
+        points = np.column_stack((
+            np.polyval(fit.coefficients, ys), ys * (height - 1)
+        )).astype(np.int32)
+        cv2.polylines(image, [points], False, color, thickness)
+
+    def _mouse_callback(self, event, x, y, flags, userdata):
+        del flags, userdata
+        if event != cv2.EVENT_LBUTTONDOWN:
+            return
+        if self.click_bgr_image is None or self.click_hsv_image is None:
+            return
+        height, width = self.click_bgr_image.shape[:2]
+        if not (0 <= x < width and 0 <= y < height):
+            return
+
+        bgr = tuple(int(value) for value in self.click_bgr_image[y, x])
+        hsv = tuple(int(value) for value in self.click_hsv_image[y, x])
+        frame_y = y + self.click_roi_y
+        sample = {
+            'roi_x': x,
+            'roi_y': y,
+            'frame_x': x,
+            'frame_y': frame_y,
+            'bgr': bgr,
+            'hsv': hsv,
+        }
+        self.click_samples.append(sample)
+        self.click_samples = self.click_samples[-20:]
+        self.get_logger().info(
+            f'CLICK ROI x={x} y={y} | FRAME x={x} y={frame_y}\n'
+            f'BGR={bgr}\n'
+            f'HSV={hsv}'
+        )
+
+    def _publish_debug(self, roi, mask, data):
+        # Mouse sampling always reads the unannotated ROI. OpenCV images and
+        # cv2.imdecode use BGR channel order; HSV is derived from that BGR data.
+        self.click_bgr_image = roi.copy()
+        self.click_hsv_image = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        self.click_roi_y = data['roi_y']
+        debug = roi.copy()
+        assignment_lookup = {
+            (item['y'], int(round(item['x']))): item
+            for item in data['assignments']
+        }
+        for scan in data['scan_diagnostics']:
+            y = scan['y']
+            cv2.line(debug, (0, y), (debug.shape[1] - 1, y), (80, 80, 80), 1)
+            cv2.putText(debug, f'y={y}', (2, max(12, y - 2)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.34, (180, 180, 180), 1)
+            for x, segment_width in scan['segments']:
+                assignment = assignment_lookup.get((y, int(round(x))))
+                track_id = assignment['track_id'] if assignment else -1
+                color = self._track_color(track_id) if track_id >= 0 else (255, 255, 255)
+                cv2.circle(debug, (int(round(x)), y), 5, color, -1)
+                cv2.putText(debug, f'T{track_id}/w{segment_width}',
+                            (int(round(x)) + 5, max(12, y - 3)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.34, color, 1)
+
+        for fit in data['fits']:
+            self._draw_fit(debug, fit, self._track_color(fit.track_id), 1)
+        left = data.get('left')
+        right = data.get('right')
+        if left:
+            for y_norm, x in left.points:
+                cv2.circle(debug, (int(x), int(y_norm * (roi.shape[0] - 1))), 5,
+                           (0, 255, 0), -1)
+        if right:
+            for y_norm, x in right.points:
+                cv2.circle(debug, (int(x), int(y_norm * (roi.shape[0] - 1))), 5,
+                           (0, 165, 255), -1)
+        self._draw_fit(debug, left, (0, 255, 0), 3)
+        self._draw_fit(debug, right, (0, 165, 255), 3)
+
+        center = data.get('center')
+        if center is not None:
+            center_fit = BoundaryFit(-1, center, [], 0.0, 0.0)
+            self._draw_fit(debug, center_fit, (255, 0, 255), 3)
+        image_center = debug.shape[1] // 2
+        cv2.line(debug, (image_center, 0), (image_center, debug.shape[0] - 1),
+                 (255, 255, 0), 2)
+
+        msg = data['message']
+        if msg.center_valid:
+            target = (int(msg.center_x), int(0.82 * (debug.shape[0] - 1)))
+            cv2.circle(debug, target, 8, (0, 0, 255), -1)
+        status = data.get('status', 'LOST')
+        if data.get('branch'):
+            status += ' | BRANCH CANDIDATE'
+        lines = [
+            status,
+            f'error={msg.lateral_error_px:.1f}px heading={msg.heading_error_rad:.3f}rad',
+            f'width={msg.lane_width_px:.1f}px confidence={msg.confidence:.2f}',
+            f'curvature_proxy={msg.curvature:.4f}',
+            f"tracks={len(data['tracks'])} valid={len(data['fits'])} "
+            f"jump={data['max_jump']:.1f}px",
+            f"reject={data.get('reject_reason', 'UNKNOWN')}",
+        ]
+        fit_text = 'fits: ' + ', '.join(
+            f"T{item['track_id']}:{item['points']}p/"
+            + (f"r{item['residual']:.1f}" if item['success'] else 'FAIL')
+            for item in data['fit_diagnostics']
+        )
+        lines.append(fit_text[:100])
+        pair_text = 'pairs: ' + ', '.join(
+            self._format_pair(candidate) for candidate in data['pair_diagnostics']
+        )
+        lines.append(pair_text[:100])
+        width_diagnostic = data.get('selected_width_diagnostic')
+        if width_diagnostic is not None:
+            coefficients = width_diagnostic['width_model']
+            lines.append(
+                f"overlap={[round(w, 1) for w in width_diagnostic['widths']]} "
+                f"median={width_diagnostic['width']:.1f}"
+            )
+            lines.append(
+                f'W(y)={coefficients[0]:.1f}y+{coefficients[1]:.1f} '
+                f"valid={width_diagnostic['width_valid']}"
+            )
+        for index, text in enumerate(lines):
+            cv2.putText(debug, text, (10, 28 + 28 * index),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
+
+        for sample in self.click_samples:
+            point = (sample['roi_x'], sample['roi_y'])
+            cv2.drawMarker(debug, point, (0, 0, 255), cv2.MARKER_CROSS, 14, 2)
+        if self.click_samples:
+            sample = self.click_samples[-1]
+            click_text = (
+                f"CLICK ROI=({sample['roi_x']},{sample['roi_y']}) "
+                f"FRAME=({sample['frame_x']},{sample['frame_y']}) "
+                f"BGR={sample['bgr']} HSV={sample['hsv']}"
+            )
+            text_y = max(20, debug.shape[0] - 16)
+            cv2.putText(debug, click_text, (10, text_y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.52, (0, 0, 255), 2)
+
+        ok, encoded = cv2.imencode('.jpg', debug, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if ok:
+            output = CompressedImage()
+            output.header = msg.header
+            output.format = 'jpeg'
+            output.data = encoded.tobytes()
+            self.debug_publisher.publish(output)
+
+        if self.debug_display and self.gui_available:
+            try:
+                cv2.imshow('NILARM Road Perception', debug)
+                cv2.imshow('NILARM Road HSV Mask', mask)
+                if not self.mouse_callback_registered:
+                    cv2.setMouseCallback(
+                        'NILARM Road Perception', self._mouse_callback
+                    )
+                    self.mouse_callback_registered = True
+                cv2.waitKey(1)
+            except cv2.error as error:
+                self.gui_available = False
+                self.get_logger().warning(f'Debug GUI unavailable: {error}')
+
+    def destroy_node(self):
+        cv2.destroyAllWindows()
+        super().destroy_node()
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = RoadPerception()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+
+        # Avoid calling shutdown twice after Ctrl+C / SIGINT.
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

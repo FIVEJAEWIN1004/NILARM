@@ -1,3 +1,6 @@
+import os
+from glob import glob
+
 from setuptools import find_packages, setup
 
 package_name = 'nav_pkg'
@@ -10,13 +13,16 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
+        (os.path.join('share', package_name, 'config'),
+            glob('config/*.yaml') + glob('config/*.md')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='junghyo',
     maintainer_email='junghyo@todo.todo',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='NILARM navigation package',
+    license='Apache-2.0',
     extras_require={
         'test': [
             'pytest',
@@ -24,13 +30,10 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'drive_test = nav_pkg.drive_test:main',
-            'obstacle_detector = nav_pkg.obstacle_detector:main',
-            'odom_reader = nav_pkg.odom_reader:main',
-            'odom_drive_test = nav_pkg.odom_drive_test:main',
-            'odom_rotate_test = nav_pkg.odom_rotate_test:main',
-            'path_test = nav_pkg.path_test:main',
-            'goal_point_test = nav_pkg.goal_point_test:main',
+            'line_detector = nav_pkg.line_detector:main',
+            'line_follower = nav_pkg.line_follower:main',
+            'road_perception = nav_pkg.road_perception:main',
+            'ir_align_node = nav_pkg.ir_align_node:main',
         ],
     },
 )

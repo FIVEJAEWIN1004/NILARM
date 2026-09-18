@@ -1,8 +1,8 @@
 Metadata-Version: 2.1
 Name: nav-pkg
 Version: 0.0.0
-Summary: TODO: Package description
+Summary: NILARM navigation package
 Maintainer: junghyo
 Maintainer-email: junghyo@todo.todo
-License: TODO: License declaration
+License: Apache-2.0
 Provides-Extra: test

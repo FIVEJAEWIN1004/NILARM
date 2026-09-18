@@ -4,7 +4,11 @@
     "/home/fivejaewin/NILARM/src/interfaces_pkg:msg/FruitDetection.msg",
     "/home/fivejaewin/NILARM/src/interfaces_pkg:msg/BasketStatus.msg",
     "/home/fivejaewin/NILARM/src/interfaces_pkg:msg/MissionState.msg",
+    "/home/fivejaewin/NILARM/src/interfaces_pkg:msg/LaneCenter.msg",
+    "/home/fivejaewin/NILARM/src/interfaces_pkg:msg/RoadModel.msg",
+    "/home/fivejaewin/NILARM/src/interfaces_pkg:msg/ObstacleStatus.msg",
     "/home/fivejaewin/NILARM/src/interfaces_pkg:action/Harvest.action",
-    "/home/fivejaewin/NILARM/src/interfaces_pkg:action/DumpBasket.action"
+    "/home/fivejaewin/NILARM/src/interfaces_pkg:action/DumpBasket.action",
+    "/home/fivejaewin/NILARM/src/interfaces_pkg:action/NavigationGoal.action"
   ]
 }

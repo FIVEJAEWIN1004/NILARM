@@ -4,10 +4,10 @@
 
 #include <string.h>
 
-#include "interfaces_pkg/action/detail/harvest__struct.h"
+#include "interfaces_pkg/action/detail/harvest__functions.h"
 #include "interfaces_pkg/action/detail/harvest__type_support.h"
 #include "rosidl_typesupport_interface/macros.h"
-#include "interfaces_pkg/action/detail/harvest__functions.h"
+#include "interfaces_pkg/action/detail/harvest__struct.h"
 
 #ifdef __cplusplus
 extern "C"

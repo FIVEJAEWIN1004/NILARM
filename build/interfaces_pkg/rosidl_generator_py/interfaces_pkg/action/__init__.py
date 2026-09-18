@@ -12,3 +12,10 @@ from interfaces_pkg.action._harvest import Harvest_GetResult_Response  # noqa: F
 from interfaces_pkg.action._harvest import Harvest_SendGoal_Event  # noqa: F401
 from interfaces_pkg.action._harvest import Harvest_SendGoal_Request  # noqa: F401
 from interfaces_pkg.action._harvest import Harvest_SendGoal_Response  # noqa: F401
+from interfaces_pkg.action._navigation_goal import NavigationGoal  # noqa: F401
+from interfaces_pkg.action._navigation_goal import NavigationGoal_GetResult_Event  # noqa: F401
+from interfaces_pkg.action._navigation_goal import NavigationGoal_GetResult_Request  # noqa: F401
+from interfaces_pkg.action._navigation_goal import NavigationGoal_GetResult_Response  # noqa: F401
+from interfaces_pkg.action._navigation_goal import NavigationGoal_SendGoal_Event  # noqa: F401
+from interfaces_pkg.action._navigation_goal import NavigationGoal_SendGoal_Request  # noqa: F401
+from interfaces_pkg.action._navigation_goal import NavigationGoal_SendGoal_Response  # noqa: F401

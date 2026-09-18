@@ -5,9 +5,9 @@
 #include <string.h>
 
 #include "interfaces_pkg/msg/detail/basket_status__functions.h"
-#include "rosidl_typesupport_interface/macros.h"
-#include "interfaces_pkg/msg/detail/basket_status__type_support.h"
 #include "interfaces_pkg/msg/detail/basket_status__struct.h"
+#include "interfaces_pkg/msg/detail/basket_status__type_support.h"
+#include "rosidl_typesupport_interface/macros.h"
 
 #ifdef __cplusplus
 extern "C"

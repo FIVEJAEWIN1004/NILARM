@@ -81,6 +81,21 @@ CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/m
 CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/mission_state__struct.hpp
 CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/mission_state__traits.hpp
 CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/mission_state__type_support.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/lane_center.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__builder.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__struct.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__traits.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__type_support.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/road_model.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__builder.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__struct.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__traits.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__type_support.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/obstacle_status.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__builder.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__struct.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__traits.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__type_support.hpp
 CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/harvest.hpp
 CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/harvest__builder.hpp
 CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/harvest__struct.hpp
@@ -91,6 +106,11 @@ CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detai
 CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/dump_basket__struct.hpp
 CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/dump_basket__traits.hpp
 CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/dump_basket__type_support.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/navigation_goal.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__builder.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__struct.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__traits.hpp
+CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__type_support.hpp
 CMakeFiles/interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/rosidl_generator_cpp__visibility_control.hpp
 
 rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/lib/rosidl_generator_cpp/rosidl_generator_cpp
@@ -115,11 +135,45 @@ rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/shar
 rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: rosidl_adapter/interfaces_pkg/msg/FruitDetection.idl
 rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: rosidl_adapter/interfaces_pkg/msg/BasketStatus.idl
 rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: rosidl_adapter/interfaces_pkg/msg/MissionState.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: rosidl_adapter/interfaces_pkg/msg/LaneCenter.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: rosidl_adapter/interfaces_pkg/msg/RoadModel.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: rosidl_adapter/interfaces_pkg/msg/ObstacleStatus.idl
 rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: rosidl_adapter/interfaces_pkg/action/Harvest.idl
 rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: rosidl_adapter/interfaces_pkg/action/DumpBasket.idl
-rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/service_msgs/msg/ServiceEventInfo.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: rosidl_adapter/interfaces_pkg/action/NavigationGoal.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Bool.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Byte.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/ByteMultiArray.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Char.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/ColorRGBA.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Empty.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Float32.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Float32MultiArray.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Float64.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Float64MultiArray.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Header.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Int16.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Int16MultiArray.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Int32.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Int32MultiArray.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Int64.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Int64MultiArray.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Int8.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/Int8MultiArray.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/MultiArrayDimension.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/MultiArrayLayout.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/String.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/UInt16.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/UInt16MultiArray.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/UInt32.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/UInt32MultiArray.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/UInt64.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/UInt64MultiArray.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/UInt8.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/std_msgs/msg/UInt8MultiArray.idl
 rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/builtin_interfaces/msg/Duration.idl
 rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/builtin_interfaces/msg/Time.idl
+rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/service_msgs/msg/ServiceEventInfo.idl
 rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/action_msgs/msg/GoalInfo.idl
 rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/action_msgs/msg/GoalStatus.idl
 rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp: /opt/ros/jazzy/share/action_msgs/msg/GoalStatusArray.idl
@@ -170,6 +224,51 @@ rosidl_generator_cpp/interfaces_pkg/msg/detail/mission_state__traits.hpp: rosidl
 rosidl_generator_cpp/interfaces_pkg/msg/detail/mission_state__type_support.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
 	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/detail/mission_state__type_support.hpp
 
+rosidl_generator_cpp/interfaces_pkg/msg/lane_center.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/lane_center.hpp
+
+rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__builder.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__builder.hpp
+
+rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__struct.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__struct.hpp
+
+rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__traits.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__traits.hpp
+
+rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__type_support.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__type_support.hpp
+
+rosidl_generator_cpp/interfaces_pkg/msg/road_model.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/road_model.hpp
+
+rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__builder.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__builder.hpp
+
+rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__struct.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__struct.hpp
+
+rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__traits.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__traits.hpp
+
+rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__type_support.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__type_support.hpp
+
+rosidl_generator_cpp/interfaces_pkg/msg/obstacle_status.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/obstacle_status.hpp
+
+rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__builder.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__builder.hpp
+
+rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__struct.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__struct.hpp
+
+rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__traits.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__traits.hpp
+
+rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__type_support.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__type_support.hpp
+
 rosidl_generator_cpp/interfaces_pkg/action/harvest.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
 	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/action/harvest.hpp
 
@@ -200,6 +299,21 @@ rosidl_generator_cpp/interfaces_pkg/action/detail/dump_basket__traits.hpp: rosid
 rosidl_generator_cpp/interfaces_pkg/action/detail/dump_basket__type_support.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
 	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/action/detail/dump_basket__type_support.hpp
 
+rosidl_generator_cpp/interfaces_pkg/action/navigation_goal.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/action/navigation_goal.hpp
+
+rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__builder.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__builder.hpp
+
+rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__struct.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__struct.hpp
+
+rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__traits.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__traits.hpp
+
+rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__type_support.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__type_support.hpp
+
 rosidl_generator_cpp/interfaces_pkg/msg/rosidl_generator_cpp__visibility_control.hpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
 	@$(CMAKE_COMMAND) -E touch_nocreate rosidl_generator_cpp/interfaces_pkg/msg/rosidl_generator_cpp__visibility_control.hpp
 
@@ -212,8 +326,13 @@ interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/harvest__
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/harvest__struct.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/harvest__traits.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/harvest__type_support.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__builder.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__struct.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__traits.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/detail/navigation_goal__type_support.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/dump_basket.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/harvest.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/action/navigation_goal.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/basket_status.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/basket_status__builder.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/basket_status__struct.hpp
@@ -223,12 +342,27 @@ interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/fruit_detect
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/fruit_detection__struct.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/fruit_detection__traits.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/fruit_detection__type_support.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__builder.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__struct.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__traits.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/lane_center__type_support.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/mission_state__builder.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/mission_state__struct.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/mission_state__traits.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/mission_state__type_support.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__builder.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__struct.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__traits.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/obstacle_status__type_support.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__builder.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__struct.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__traits.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/detail/road_model__type_support.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/fruit_detection.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/lane_center.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/mission_state.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/obstacle_status.hpp
+interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/road_model.hpp
 interfaces_pkg__cpp: rosidl_generator_cpp/interfaces_pkg/msg/rosidl_generator_cpp__visibility_control.hpp
 interfaces_pkg__cpp: CMakeFiles/interfaces_pkg__cpp.dir/build.make
 .PHONY : interfaces_pkg__cpp
