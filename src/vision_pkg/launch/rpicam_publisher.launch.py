@@ -1,4 +1,4 @@
-"""Launch only the inactive-by-default camera correction controller."""
+"""Launch the OV5647 rpicam subprocess publisher."""
 
 from pathlib import Path
 
@@ -14,12 +14,11 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'params_file',
-            default_value=str(
-                share / 'config' / 'straight_nav_controller.yaml')),
+            default_value=str(share / 'config' / 'rpicam_publisher.yaml')),
         Node(
             package='vision_pkg',
-            executable='camera_drive_controller',
-            name='camera_drive_controller',
+            executable='rpicam_publisher',
+            name='rpicam_publisher',
             output='screen',
             parameters=[LaunchConfiguration('params_file')],
         ),

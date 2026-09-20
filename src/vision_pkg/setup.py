@@ -30,7 +30,9 @@ setup(
    entry_points={
     'console_scripts': [
         'vision_node = vision_pkg.vision_node:main',
-        'camera_drive_controller = vision_pkg.camera_drive_controller:main',
+        # The former additive controller remains in the source tree for rollback.
+        'camera_drive_controller = vision_pkg.straight_nav_controller:main',
+        'rpicam_publisher = vision_pkg.rpicam_publisher:main',
     ],
  },
 )

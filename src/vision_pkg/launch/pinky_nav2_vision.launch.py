@@ -5,6 +5,7 @@ from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -16,6 +17,8 @@ def generate_launch_description():
     vision_params = LaunchConfiguration('vision_params')
     nav_params = LaunchConfiguration('nav_params')
     autostart = LaunchConfiguration('autostart')
+    start_camera = LaunchConfiguration('start_camera')
+    camera_params = LaunchConfiguration('camera_params')
 
     nav_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -35,6 +38,15 @@ def generate_launch_description():
         parameters=[vision_params],
     )
 
+    camera_node = Node(
+        package='vision_pkg',
+        executable='rpicam_publisher',
+        name='rpicam_publisher',
+        output='screen',
+        parameters=[camera_params],
+        condition=IfCondition(start_camera),
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             'nav_params',
@@ -43,8 +55,14 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'vision_params',
             default_value=str(
-                vision_share / 'config' / 'camera_drive_controller.yaml')),
+                vision_share / 'config' / 'straight_nav_controller.yaml')),
         DeclareLaunchArgument('autostart', default_value='false'),
+        DeclareLaunchArgument('start_camera', default_value='true'),
+        DeclareLaunchArgument(
+            'camera_params',
+            default_value=str(
+                vision_share / 'config' / 'rpicam_publisher.yaml')),
         nav_launch,
+        camera_node,
         vision_node,
     ])

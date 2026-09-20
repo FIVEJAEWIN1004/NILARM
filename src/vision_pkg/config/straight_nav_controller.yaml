@@ -1,0 +1,30 @@
+camera_drive_controller:
+  ros__parameters:
+    camera_topic: /camera/image_raw
+    nav_cmd_topic: /cmd_vel_nav_smoothed
+    output_cmd_topic: /cmd_vel
+    debug_image_topic: /vision_drive/debug_image
+    enabled: false
+    initial_mode: LINE_FOLLOW
+
+    roi_top: 0.62
+    roi_bottom: 0.94
+    boundary_hsv_lower: [5, 35, 35]
+    boundary_hsv_upper: [35, 255, 230]
+    morph_kernel: 5
+    min_boundary_area: 250.0
+    left_search_max_ratio: 0.70
+
+    # LINE_FOLLOW stays stopped until one pixel calibration is positive.
+    left_offset_cm: 8.0
+    left_offset_pixels: -1.0
+    pixels_per_cm: 0.0
+
+    kp: 0.004
+    deadband_pixels: 5.0
+    linear_speed: 0.05
+    angular_limit: 0.20
+
+    image_timeout_sec: 0.5
+    nav_cmd_timeout_sec: 0.5
+    mode_switch_hold_sec: 0.20

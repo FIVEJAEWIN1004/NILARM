@@ -1,0 +1,8 @@
+# Fill these after measuring the real field in the odom frame.
+# This is mission-route data, not a ROS parameter file.
+frame_id: odom
+waypoints:
+  wp1_stop1: {x: null, y: null, yaw: null}
+  wp2_station: {x: null, y: null, yaw: null}
+  wp3_stop2: {x: null, y: null, yaw: null}
+  wp4_line_start: {x: null, y: null, yaw: null}
