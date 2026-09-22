@@ -21,11 +21,12 @@ import numpy as np
 from omx_f import OmxFollower
 
 
-# Verified from v4l2-ctl on this machine:
-#   /dev/video2 = Innomaker-U20CAM-720P (arm camera, index0)
-# Never fall back to index 0 because that is the laptop HD Camera.
-CAMERA_DEVICE_PATH = Path("/dev/video2")
-CAMERA_EXPECTED_NAME = "Innomaker"
+# Innomaker arm camera.  The by-id path remains stable if /dev/video numbers
+# change; /dev/video2 is the verified fallback on this machine.
+CAMERA_DEVICE_PATH = Path(
+    "/dev/v4l/by-id/"
+    "usb-Innomaker_Innomaker-U20CAM-720P_SN0001-video-index0"
+)
 CAMERA_INDEX_FALLBACK = 2
 CAMERA_WIDTH = 640
 CAMERA_HEIGHT = 480
@@ -37,40 +38,10 @@ CAMERA_MOVE_DURATION_SEC = 6.0
 SETTLE_TIME_SEC = 1.0
 MARKER_COUNT = 9
 
-# Recovery data copied from the failed 2026-09-20 run.  It is offered only
-# when the physical markers have not moved.  The user explicitly chooses
-# RESUME or NEW at startup, so stale points are never used silently.
-RECOVERY_IMAGE_POINTS = [
-    [24.0, 22.0],
-    [297.0, 25.0],
-    [612.0, 25.0],
-    [30.0, 211.0],
-    [336.0, 233.0],
-    [629.0, 260.0],
-    [50.0, 414.0],
-    [358.0, 460.0],
-    [615.0, 448.0],
-]
-RECOVERY_ROBOT_POINTS_XYZ = [
-    [0.2337, 0.0873, -0.0155],
-    [0.2101, -0.0131, -0.0219],
-    [0.2420, -0.1342, -0.0176],
-    [0.1524, 0.0772, -0.0105],
-    [0.1521, -0.0258, -0.0105],
-    [0.1490, -0.1434, -0.0084],
-    [0.0801, 0.0664, -0.0105],
-    [0.0804, -0.0460, 0.0030],
-    [0.0779, -0.1513, 0.0011],
-]
-
 # Save only a calibration accurate enough for later approach testing.
 MAX_RMS_REPROJECTION_ERROR_M = 0.008
 MAX_POINT_REPROJECTION_ERROR_M = 0.015
-# The raw robot z values can change systematically across the table because
-# the taught TCP and the real gripper contact point are not identical.  Judge
-# contact consistency by deviation from the best-fit floor plane instead.
-MAX_FLOOR_PLANE_RMS_DEVIATION_M = 0.005
-MAX_FLOOR_PLANE_POINT_DEVIATION_M = 0.008
+MAX_TAUGHT_Z_RANGE_M = 0.010
 
 
 class CalibrationCancelled(Exception):
@@ -91,31 +62,10 @@ def load_camera_joints() -> np.ndarray:
     return joints
 
 
-def camera_source() -> tuple[str, str]:
-    if not CAMERA_DEVICE_PATH.exists():
-        raise RuntimeError(
-            f"팔 카메라 장치가 없습니다: {CAMERA_DEVICE_PATH}\n"
-            "USB 연결과 v4l2-ctl --list-devices 결과를 확인하세요."
-        )
-
-    sysfs_name_path = Path(
-        f"/sys/class/video4linux/{CAMERA_DEVICE_PATH.name}/name"
-    )
-    if not sysfs_name_path.is_file():
-        raise RuntimeError(
-            f"카메라 이름을 확인할 수 없습니다: {sysfs_name_path}"
-        )
-
-    device_name = sysfs_name_path.read_text(encoding="utf-8").strip()
-    if CAMERA_EXPECTED_NAME.lower() not in device_name.lower():
-        raise RuntimeError(
-            f"실행 중단: {CAMERA_DEVICE_PATH}는 팔 카메라가 아닙니다.\n"
-            f"감지된 이름: {device_name}\n"
-            f"필요한 이름: {CAMERA_EXPECTED_NAME}\n"
-            "노트북 카메라로는 보정하지 않습니다."
-        )
-
-    return str(CAMERA_DEVICE_PATH), f"{CAMERA_DEVICE_PATH} ({device_name})"
+def camera_source():
+    if CAMERA_DEVICE_PATH.exists():
+        return str(CAMERA_DEVICE_PATH), str(CAMERA_DEVICE_PATH)
+    return CAMERA_INDEX_FALLBACK, f"/dev/video{CAMERA_INDEX_FALLBACK}"
 
 
 def open_camera() -> cv2.VideoCapture:
@@ -223,34 +173,33 @@ def select_marker_pixels(frame: np.ndarray) -> list[list[float]]:
     return [[float(x), float(y)] for x, y in clicked]
 
 
-def teach_floor_point(arm: OmxFollower, index: int) -> list[float]:
-    """Teach one marker so a failed point can be measured again."""
-    input(
-        f"\n팔을 두 손으로 받친 뒤 Enter를 누르면 기준점 {index}의 "
-        "teach 모드로 들어갑니다: "
-    )
-    with arm.teach():
-        print("토크가 풀렸습니다. 팔을 계속 받치세요.")
-        print(f"그리퍼 끝 중심을 실제 기준점 {index}에 맞추세요.")
-        input("정확히 맞춘 상태에서 Enter를 누르세요: ")
-        pose = np.asarray(arm.pose(), dtype=float).copy()
-
-    if pose.size < 3 or not np.all(np.isfinite(pose[:3])):
-        raise RuntimeError(f"기준점 {index}의 로봇 좌표를 읽지 못했습니다.")
-
-    xyz = [float(pose[0]), float(pose[1]), float(pose[2])]
-    print(
-        f"기준점 {index} 저장: "
-        f"x={xyz[0]:.4f}, y={xyz[1]:.4f}, z={xyz[2]:.4f} m"
-    )
-    return xyz
-
-
 def teach_floor_points(arm: OmxFollower) -> list[list[float]]:
     """Teach the gripper TCP XYZ for the 9 clicked floor markers."""
+    points: list[list[float]] = []
     print("\n이제 클릭했던 기준점을 같은 번호 순서로 짚습니다.")
     print("모든 점에서 같은 그리퍼 끝부분을 책상 표면에 맞추세요.")
-    return [teach_floor_point(arm, index) for index in range(1, MARKER_COUNT + 1)]
+
+    for index in range(1, MARKER_COUNT + 1):
+        input(
+            f"\n팔을 두 손으로 받친 뒤 Enter를 누르면 기준점 {index}의 "
+            "teach 모드로 들어갑니다: "
+        )
+        with arm.teach():
+            print("토크가 풀렸습니다. 팔을 계속 받치세요.")
+            print(f"그리퍼 끝 중심을 실제 기준점 {index}에 맞추세요.")
+            input("정확히 맞춘 상태에서 Enter를 누르세요: ")
+            pose = np.asarray(arm.pose(), dtype=float).copy()
+
+        if pose.size < 3 or not np.all(np.isfinite(pose[:3])):
+            raise RuntimeError(f"기준점 {index}의 로봇 좌표를 읽지 못했습니다.")
+
+        xyz = [float(pose[0]), float(pose[1]), float(pose[2])]
+        points.append(xyz)
+        print(
+            f"기준점 {index} 저장: "
+            f"x={xyz[0]:.4f}, y={xyz[1]:.4f}, z={xyz[2]:.4f} m"
+        )
+    return points
 
 
 def calculate_homography(
@@ -288,142 +237,46 @@ def reprojection_statistics(
     return errors_m.tolist(), rms_m, max_m
 
 
-def evaluate_floor_and_fit(
+def validate_floor_and_fit(
     robot_points_xyz: list[list[float]],
     errors_m: list[float],
     rms_m: float,
     max_m: float,
-) -> dict:
-    points = np.asarray(robot_points_xyz, dtype=float)
-    z_values = points[:, 2]
+) -> float:
+    z_values = np.asarray(robot_points_xyz, dtype=float)[:, 2]
     z_range_m = float(np.max(z_values) - np.min(z_values))
 
-    # z = ax + by + c represents the floor as measured by the robot model.
-    floor_matrix = np.c_[points[:, 0], points[:, 1], np.ones(MARKER_COUNT)]
-    floor_coefficients, *_ = np.linalg.lstsq(
-        floor_matrix, z_values, rcond=None
-    )
-    fitted_z = floor_matrix @ floor_coefficients
-    floor_residuals_m = z_values - fitted_z
-    floor_rms_m = float(np.sqrt(np.mean(np.square(floor_residuals_m))))
-    floor_max_m = float(np.max(np.abs(floor_residuals_m)))
-
     print("\n========== 9점 보정 품질 ==========")
-    for index, (error_m, floor_residual_m) in enumerate(
-        zip(errors_m, floor_residuals_m), start=1
-    ):
-        print(
-            f"{index}번: XY 오차 {error_m * 1000:.1f} mm / "
-            f"바닥 평면 높이 오차 {floor_residual_m * 1000:+.1f} mm"
-        )
+    for index, error_m in enumerate(errors_m, start=1):
+        print(f"{index}번 재투영 오차: {error_m * 1000:.1f} mm")
     print(f"RMS 재투영 오차: {rms_m * 1000:.1f} mm")
     print(f"최대 재투영 오차: {max_m * 1000:.1f} mm")
-    print(f"원시 z 높이 범위(참고): {z_range_m * 1000:.1f} mm")
-    print(f"바닥 평면 기준 RMS 높이 오차: {floor_rms_m * 1000:.1f} mm")
-    print(f"바닥 평면 기준 최대 높이 오차: {floor_max_m * 1000:.1f} mm")
+    print(f"9점 z 높이 범위: {z_range_m * 1000:.1f} mm")
     print("===================================")
 
-    failures: list[str] = []
-    retry_indices: set[int] = set()
-
-    xy_bad = [
-        index
-        for index, error_m in enumerate(errors_m, start=1)
-        if error_m > MAX_POINT_REPROJECTION_ERROR_M
-    ]
-    retry_indices.update(xy_bad)
-
+    failures = []
     if rms_m > MAX_RMS_REPROJECTION_ERROR_M:
         failures.append(
             f"RMS {rms_m * 1000:.1f} mm > "
             f"허용 {MAX_RMS_REPROJECTION_ERROR_M * 1000:.1f} mm"
         )
-        if not xy_bad:
-            retry_indices.add(int(np.argmax(errors_m)) + 1)
     if max_m > MAX_POINT_REPROJECTION_ERROR_M:
         failures.append(
             f"최대 {max_m * 1000:.1f} mm > "
             f"허용 {MAX_POINT_REPROJECTION_ERROR_M * 1000:.1f} mm"
         )
-
-    height_bad = [
-        index
-        for index, residual_m in enumerate(floor_residuals_m, start=1)
-        if abs(residual_m) > MAX_FLOOR_PLANE_POINT_DEVIATION_M
-    ]
-    retry_indices.update(height_bad)
-
-    if floor_rms_m > MAX_FLOOR_PLANE_RMS_DEVIATION_M:
+    if z_range_m > MAX_TAUGHT_Z_RANGE_M:
         failures.append(
-            f"바닥 평면 RMS 높이 오차 {floor_rms_m * 1000:.1f} mm > "
-            f"허용 {MAX_FLOOR_PLANE_RMS_DEVIATION_M * 1000:.1f} mm"
-        )
-        if not height_bad:
-            retry_indices.add(int(np.argmax(np.abs(floor_residuals_m))) + 1)
-    if floor_max_m > MAX_FLOOR_PLANE_POINT_DEVIATION_M:
-        failures.append(
-            f"바닥 평면 최대 높이 오차 {floor_max_m * 1000:.1f} mm > "
-            f"허용 {MAX_FLOOR_PLANE_POINT_DEVIATION_M * 1000:.1f} mm"
+            f"z 범위 {z_range_m * 1000:.1f} mm > "
+            f"허용 {MAX_TAUGHT_Z_RANGE_M * 1000:.1f} mm"
         )
 
     if failures:
-        print("보정 품질 기준을 통과하지 못했습니다:")
-        for failure in failures:
-            print(f"- {failure}")
-        print(
-            "재측정 추천 번호: "
-            + ", ".join(str(index) for index in sorted(retry_indices))
+        raise ValueError(
+            "보정 품질 기준을 통과하지 못해 JSON을 저장하지 않습니다:\n- "
+            + "\n- ".join(failures)
         )
-
-    return {
-        "passed": not failures,
-        "failures": failures,
-        "retry_indices": sorted(retry_indices),
-        "z_range_m": z_range_m,
-        "floor_coefficients": floor_coefficients.tolist(),
-        "floor_residuals_m": floor_residuals_m.tolist(),
-        "floor_rms_m": floor_rms_m,
-        "floor_max_m": floor_max_m,
-    }
-
-
-def ask_retry_indices(suggested: list[int]) -> list[int]:
-    suggestion = ",".join(str(index) for index in suggested)
-    while True:
-        answer = input(
-            f"재측정할 번호를 입력하세요 (예: {suggestion or '2'} 또는 2,8 / "
-            "Q: 저장 없이 종료): "
-        ).strip()
-        if answer.upper() == "Q":
-            raise CalibrationCancelled
-
-        tokens = answer.replace(",", " ").split()
-        try:
-            indices = sorted(set(int(token) for token in tokens))
-        except ValueError:
-            print("번호만 입력하세요. 예: 2 또는 2,8")
-            continue
-
-        if not indices or any(index < 1 or index > MARKER_COUNT for index in indices):
-            print(f"1부터 {MARKER_COUNT}까지의 번호를 입력하세요.")
-            continue
-        return indices
-
-
-def ask_resume_previous_run() -> bool:
-    print("\n방금 실패한 9점 측정값을 이 파일에 복구해 두었습니다.")
-    print("카메라, 로봇 베이스, 책상 스티커 9개를 움직이지 않았을 때만 RESUME하세요.")
-    while True:
-        answer = input(
-            "기존 9점에서 이어하려면 RESUME / 처음부터 하려면 NEW / 종료 Q: "
-        ).strip().upper()
-        if answer == "RESUME":
-            return True
-        if answer == "NEW":
-            return False
-        if answer == "Q":
-            raise CalibrationCancelled
-        print("RESUME, NEW 또는 Q 중 하나를 입력하세요.")
+    return z_range_m
 
 
 def backup_existing_output() -> Path | None:
@@ -445,7 +298,7 @@ def save_calibration(
     errors_m: list[float],
     rms_m: float,
     max_m: float,
-    floor_quality: dict,
+    z_range_m: float,
 ) -> None:
     robot_points_xy = [point[:2] for point in robot_points_xyz]
     data = {
@@ -469,18 +322,7 @@ def save_calibration(
             "point_errors_mm": [float(value * 1000) for value in errors_m],
             "rms_error_mm": float(rms_m * 1000),
             "max_error_mm": float(max_m * 1000),
-            "taught_z_range_mm": float(floor_quality["z_range_m"] * 1000),
-            "floor_plane_z_from_xy": floor_quality["floor_coefficients"],
-            "floor_plane_point_residuals_mm": [
-                float(value * 1000)
-                for value in floor_quality["floor_residuals_m"]
-            ],
-            "floor_plane_rms_error_mm": float(
-                floor_quality["floor_rms_m"] * 1000
-            ),
-            "floor_plane_max_error_mm": float(
-                floor_quality["floor_max_m"] * 1000
-            ),
+            "taught_z_range_mm": float(z_range_m * 1000),
         },
         # Grasp calibration is intentionally a later, separate stage.
         "grasp": None,
@@ -504,59 +346,37 @@ def main() -> None:
     try:
         camera_joints = load_camera_joints()
         print("저장된 촬영 관절각 [deg]:", np.round(np.degrees(camera_joints), 1))
-        resume_previous = ask_resume_previous_run()
 
+        cap = open_camera()
         print("OMX 로봇팔에 연결합니다.")
         arm = OmxFollower().connect()
         arm.ready(duration=5.0)
 
-        if resume_previous:
-            image_points = [point.copy() for point in RECOVERY_IMAGE_POINTS]
-            robot_points_xyz = [
-                point.copy() for point in RECOVERY_ROBOT_POINTS_XYZ
-            ]
-            print("이전 화면 좌표와 로봇 좌표 9개를 불러왔습니다.")
-            print("먼저 품질을 계산한 뒤 재측정 추천 번호를 표시합니다.")
-        else:
-            cap = open_camera()
-            print("저장된 카메라 촬영 자세로 이동합니다.")
-            arm.move_joints(camera_joints, duration=CAMERA_MOVE_DURATION_SEC)
-            time.sleep(SETTLE_TIME_SEC)
+        print("저장된 카메라 촬영 자세로 이동합니다.")
+        arm.move_joints(camera_joints, duration=CAMERA_MOVE_DURATION_SEC)
+        time.sleep(SETTLE_TIME_SEC)
 
-            frozen_frame = capture_stable_frame(cap)
-            image_points = select_marker_pixels(frozen_frame)
+        frozen_frame = capture_stable_frame(cap)
+        image_points = select_marker_pixels(frozen_frame)
 
-            cap.release()
-            cap = None
-            cv2.destroyAllWindows()
+        cap.release()
+        cap = None
+        cv2.destroyAllWindows()
 
-            robot_points_xyz = teach_floor_points(arm)
-
-        while True:
-            robot_points_xy = [point[:2] for point in robot_points_xyz]
-            homography = calculate_homography(image_points, robot_points_xy)
-            errors_m, rms_m, max_m = reprojection_statistics(
-                image_points,
-                robot_points_xy,
-                homography,
-            )
-            floor_quality = evaluate_floor_and_fit(
-                robot_points_xyz,
-                errors_m,
-                rms_m,
-                max_m,
-            )
-            if floor_quality["passed"]:
-                break
-
-            retry_indices = ask_retry_indices(floor_quality["retry_indices"])
-            print(
-                "\n선택한 기준점만 다시 측정합니다: "
-                + ", ".join(str(index) for index in retry_indices)
-            )
-            for index in retry_indices:
-                robot_points_xyz[index - 1] = teach_floor_point(arm, index)
-            print("선택한 점의 재측정이 끝났습니다. 품질을 다시 계산합니다.")
+        robot_points_xyz = teach_floor_points(arm)
+        robot_points_xy = [point[:2] for point in robot_points_xyz]
+        homography = calculate_homography(image_points, robot_points_xy)
+        errors_m, rms_m, max_m = reprojection_statistics(
+            image_points,
+            robot_points_xy,
+            homography,
+        )
+        z_range_m = validate_floor_and_fit(
+            robot_points_xyz,
+            errors_m,
+            rms_m,
+            max_m,
+        )
 
         print("\n품질 기준을 통과했습니다.")
         confirmation = input(
@@ -574,7 +394,7 @@ def main() -> None:
             errors_m,
             rms_m,
             max_m,
-            floor_quality,
+            z_range_m,
         )
         print("새 평면 보정을 저장했습니다:", OUTPUT_PATH)
         print("집기 자세는 아직 저장하지 않았습니다.")
