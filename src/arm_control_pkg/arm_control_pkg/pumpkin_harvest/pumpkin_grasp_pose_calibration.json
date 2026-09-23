@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "method": "manual_open_gripper_grasp_pose",
+  "saved_at_utc": "2026-09-20T12:03:30.092476+00:00",
+  "source_plane_calibration": "pumpkin_plane_calibration.json",
+  "taught_pose_m": [
+    0.16425376471768693,
+    -0.039917736971897134,
+    -0.010336099788977551
+  ],
+  "taught_xy_m": [
+    0.16425376471768693,
+    -0.039917736971897134
+  ],
+  "taught_joints_rad": [
+    -0.21475731030398976,
+    -0.018407769454627694,
+    0.6994952392758523,
+    0.7669903939428205,
+    0.0337475773334841
+  ],
+  "taught_joints_deg": [
+    -12.3046875,
+    -1.0546875,
+    40.078125,
+    43.9453125,
+    1.9335937499999998
+  ],
+  "tool_rpy_rad": [
+    0.035281558121369745,
+    1.4480778637640452,
+    -0.21475731030398976
+  ],
+  "tool_rpy_deg": [
+    2.021484375,
+    82.96875,
+    -12.3046875
+  ],
+  "tool_pitch_rad": 1.4480778637640452,
+  "tool_pitch_deg": 82.96875,
+  "floor_z_m": -0.009749057681008061,
+  "grasp_z_m": -0.010336099788977551,
+  "model_relative_grasp_z_offset_m": -0.0005870421079694904,
+  "model_relative_grasp_z_offset_mm": -0.5870421079694904,
+  "grasp_clearance_above_floor_m": -0.0005870421079694904,
+  "grasp_clearance_above_floor_mm": -0.5870421079694904,
+  "approach_clearance_m": 0.08,
+  "approach_z_at_taught_xy_m": 0.06966390021102245,
+  "calibration_region_margin_m": 0.07416125856716656,
+  "plane_quality": {
+    "rms_error_mm": 6.865643561434828,
+    "max_error_mm": 10.949291503226112,
+    "floor_rms_error_mm": 3.243592204719409,
+    "floor_max_error_mm": 5.959696945593297
+  }
+}
