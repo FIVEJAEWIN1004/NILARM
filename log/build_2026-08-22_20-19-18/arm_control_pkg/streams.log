@@ -1,0 +1,33 @@
+[1.583s] Invoking command in '/home/fivejaewin/NILARM/src/arm_control_pkg': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/fivejaewin/NILARM/build/arm_control_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/fivejaewin/NILARM/install/arm_control_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/arm_control_pkg build --build-base /home/fivejaewin/NILARM/build/arm_control_pkg/build install --record /home/fivejaewin/NILARM/build/arm_control_pkg/install.log --install-scripts $base/lib/arm_control_pkg --single-version-externally-managed install_data
+[2.005s] running egg_info
+[2.005s] creating ../../build/arm_control_pkg/arm_control_pkg.egg-info
+[2.036s] writing ../../build/arm_control_pkg/arm_control_pkg.egg-info/PKG-INFO
+[2.036s] writing dependency_links to ../../build/arm_control_pkg/arm_control_pkg.egg-info/dependency_links.txt
+[2.037s] writing requirements to ../../build/arm_control_pkg/arm_control_pkg.egg-info/requires.txt
+[2.037s] writing top-level names to ../../build/arm_control_pkg/arm_control_pkg.egg-info/top_level.txt
+[2.037s] writing manifest file '../../build/arm_control_pkg/arm_control_pkg.egg-info/SOURCES.txt'
+[2.093s] reading manifest file '../../build/arm_control_pkg/arm_control_pkg.egg-info/SOURCES.txt'
+[2.093s] adding license file 'LICENSE'
+[2.094s] writing manifest file '../../build/arm_control_pkg/arm_control_pkg.egg-info/SOURCES.txt'
+[2.094s] running build
+[2.094s] running build_py
+[2.095s] creating /home/fivejaewin/NILARM/build/arm_control_pkg/build
+[2.095s] creating /home/fivejaewin/NILARM/build/arm_control_pkg/build/lib
+[2.095s] creating /home/fivejaewin/NILARM/build/arm_control_pkg/build/lib/arm_control_pkg
+[2.095s] copying arm_control_pkg/__init__.py -> /home/fivejaewin/NILARM/build/arm_control_pkg/build/lib/arm_control_pkg
+[2.095s] running install
+[2.102s] running install_lib
+[2.123s] creating /home/fivejaewin/NILARM/install/arm_control_pkg/lib/python3.12/site-packages/arm_control_pkg
+[2.124s] copying /home/fivejaewin/NILARM/build/arm_control_pkg/build/lib/arm_control_pkg/__init__.py -> /home/fivejaewin/NILARM/install/arm_control_pkg/lib/python3.12/site-packages/arm_control_pkg
+[2.124s] byte-compiling /home/fivejaewin/NILARM/install/arm_control_pkg/lib/python3.12/site-packages/arm_control_pkg/__init__.py to __init__.cpython-312.pyc
+[2.124s] running install_data
+[2.125s] creating /home/fivejaewin/NILARM/install/arm_control_pkg/share/ament_index
+[2.125s] creating /home/fivejaewin/NILARM/install/arm_control_pkg/share/ament_index/resource_index
+[2.125s] creating /home/fivejaewin/NILARM/install/arm_control_pkg/share/ament_index/resource_index/packages
+[2.125s] copying resource/arm_control_pkg -> /home/fivejaewin/NILARM/install/arm_control_pkg/share/ament_index/resource_index/packages
+[2.125s] copying package.xml -> /home/fivejaewin/NILARM/install/arm_control_pkg/share/arm_control_pkg
+[2.125s] running install_egg_info
+[2.146s] Copying ../../build/arm_control_pkg/arm_control_pkg.egg-info to /home/fivejaewin/NILARM/install/arm_control_pkg/lib/python3.12/site-packages/arm_control_pkg-0.0.0-py3.12.egg-info
+[2.147s] running install_scripts
+[2.286s] writing list of installed files to '/home/fivejaewin/NILARM/build/arm_control_pkg/install.log'
+[2.324s] Invoked command in '/home/fivejaewin/NILARM/src/arm_control_pkg' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/fivejaewin/NILARM/build/arm_control_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/fivejaewin/NILARM/install/arm_control_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/arm_control_pkg build --build-base /home/fivejaewin/NILARM/build/arm_control_pkg/build install --record /home/fivejaewin/NILARM/build/arm_control_pkg/install.log --install-scripts $base/lib/arm_control_pkg --single-version-externally-managed install_data

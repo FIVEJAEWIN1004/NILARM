@@ -1,0 +1,38 @@
+[1.473s] Invoking command in '/home/fivejaewin/NILARM/src/vision_pkg': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/fivejaewin/NILARM/build/vision_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/fivejaewin/NILARM/install/vision_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/vision_pkg build --build-base /home/fivejaewin/NILARM/build/vision_pkg/build install --record /home/fivejaewin/NILARM/build/vision_pkg/install.log --install-scripts $base/lib/vision_pkg --single-version-externally-managed install_data
+[1.775s] running egg_info
+[1.775s] creating ../../build/vision_pkg/vision_pkg.egg-info
+[1.794s] writing ../../build/vision_pkg/vision_pkg.egg-info/PKG-INFO
+[1.794s] writing dependency_links to ../../build/vision_pkg/vision_pkg.egg-info/dependency_links.txt
+[1.795s] writing entry points to ../../build/vision_pkg/vision_pkg.egg-info/entry_points.txt
+[1.795s] writing requirements to ../../build/vision_pkg/vision_pkg.egg-info/requires.txt
+[1.795s] writing top-level names to ../../build/vision_pkg/vision_pkg.egg-info/top_level.txt
+[1.795s] writing manifest file '../../build/vision_pkg/vision_pkg.egg-info/SOURCES.txt'
+[1.835s] reading manifest file '../../build/vision_pkg/vision_pkg.egg-info/SOURCES.txt'
+[1.835s] adding license file 'LICENSE'
+[1.836s] writing manifest file '../../build/vision_pkg/vision_pkg.egg-info/SOURCES.txt'
+[1.836s] running build
+[1.836s] running build_py
+[1.836s] creating /home/fivejaewin/NILARM/build/vision_pkg/build
+[1.836s] creating /home/fivejaewin/NILARM/build/vision_pkg/build/lib
+[1.836s] creating /home/fivejaewin/NILARM/build/vision_pkg/build/lib/vision_pkg
+[1.836s] copying vision_pkg/__init__.py -> /home/fivejaewin/NILARM/build/vision_pkg/build/lib/vision_pkg
+[1.837s] copying vision_pkg/vision_node.py -> /home/fivejaewin/NILARM/build/vision_pkg/build/lib/vision_pkg
+[1.837s] running install
+[1.844s] running install_lib
+[1.864s] creating /home/fivejaewin/NILARM/install/vision_pkg/lib/python3.12/site-packages/vision_pkg
+[1.864s] copying /home/fivejaewin/NILARM/build/vision_pkg/build/lib/vision_pkg/__init__.py -> /home/fivejaewin/NILARM/install/vision_pkg/lib/python3.12/site-packages/vision_pkg
+[1.865s] copying /home/fivejaewin/NILARM/build/vision_pkg/build/lib/vision_pkg/vision_node.py -> /home/fivejaewin/NILARM/install/vision_pkg/lib/python3.12/site-packages/vision_pkg
+[1.865s] byte-compiling /home/fivejaewin/NILARM/install/vision_pkg/lib/python3.12/site-packages/vision_pkg/__init__.py to __init__.cpython-312.pyc
+[1.865s] byte-compiling /home/fivejaewin/NILARM/install/vision_pkg/lib/python3.12/site-packages/vision_pkg/vision_node.py to vision_node.cpython-312.pyc
+[1.866s] running install_data
+[1.866s] creating /home/fivejaewin/NILARM/install/vision_pkg/share/ament_index
+[1.866s] creating /home/fivejaewin/NILARM/install/vision_pkg/share/ament_index/resource_index
+[1.866s] creating /home/fivejaewin/NILARM/install/vision_pkg/share/ament_index/resource_index/packages
+[1.866s] copying resource/vision_pkg -> /home/fivejaewin/NILARM/install/vision_pkg/share/ament_index/resource_index/packages
+[1.866s] copying package.xml -> /home/fivejaewin/NILARM/install/vision_pkg/share/vision_pkg
+[1.867s] running install_egg_info
+[1.888s] Copying ../../build/vision_pkg/vision_pkg.egg-info to /home/fivejaewin/NILARM/install/vision_pkg/lib/python3.12/site-packages/vision_pkg-0.0.0-py3.12.egg-info
+[1.888s] running install_scripts
+[2.024s] Installing vision_node script to /home/fivejaewin/NILARM/install/vision_pkg/lib/vision_pkg
+[2.024s] writing list of installed files to '/home/fivejaewin/NILARM/build/vision_pkg/install.log'
+[2.062s] Invoked command in '/home/fivejaewin/NILARM/src/vision_pkg' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/fivejaewin/NILARM/build/vision_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/fivejaewin/NILARM/install/vision_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/vision_pkg build --build-base /home/fivejaewin/NILARM/build/vision_pkg/build install --record /home/fivejaewin/NILARM/build/vision_pkg/install.log --install-scripts $base/lib/vision_pkg --single-version-externally-managed install_data

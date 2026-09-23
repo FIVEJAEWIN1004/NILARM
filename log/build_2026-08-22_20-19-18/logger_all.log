@@ -1,0 +1,311 @@
+[0.126s] DEBUG:colcon:Command line arguments: ['/usr/bin/colcon', 'build']
+[0.127s] DEBUG:colcon:Parsed command line arguments: Namespace(log_base=None, log_level=None, verb_name='build', build_base='build', install_base='install', merge_install=False, symlink_install=False, test_result_base=None, continue_on_error=False, executor='parallel', parallel_workers=12, event_handlers=None, ignore_user_meta=False, metas=['./colcon.meta'], base_paths=['.'], packages_ignore=None, packages_ignore_regex=None, paths=None, packages_up_to=None, packages_up_to_regex=None, packages_above=None, packages_above_and_dependencies=None, packages_above_depth=None, packages_select_by_dep=None, packages_skip_by_dep=None, packages_skip_up_to=None, packages_select_build_failed=False, packages_skip_build_finished=False, packages_select_test_failures=False, packages_skip_test_passed=False, packages_select=None, packages_skip=None, packages_select_regex=None, packages_skip_regex=None, packages_start=None, packages_end=None, allow_overriding=[], cmake_args=None, cmake_target=None, cmake_target_skip_unavailable=False, cmake_clean_cache=False, cmake_clean_first=False, cmake_force_configure=False, ament_cmake_args=None, catkin_cmake_args=None, catkin_skip_building_tests=False, mixin_files=None, mixin=None, verb_parser=<colcon_mixin.mixin.mixin_argument.MixinArgumentDecorator object at 0x7079aca90860>, verb_extension=<colcon_core.verb.build.BuildVerb object at 0x7079aca905f0>, main=<bound method BuildVerb.main of <colcon_core.verb.build.BuildVerb object at 0x7079aca905f0>>, mixin_verb=('build',))
+[0.170s] Level 1:colcon.colcon_core.package_discovery:discover_packages(colcon_meta) check parameters
+[0.170s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) check parameters
+[0.170s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) check parameters
+[0.170s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) check parameters
+[0.171s] Level 1:colcon.colcon_core.package_discovery:discover_packages(colcon_meta) discover
+[0.171s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) discover
+[0.171s] INFO:colcon.colcon_core.package_discovery:Crawling recursively for packages in '/home/fivejaewin/NILARM'
+[0.171s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['ignore', 'ignore_ament_install']
+[0.171s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ignore'
+[0.171s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ignore_ament_install'
+[0.171s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['colcon_pkg']
+[0.171s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'colcon_pkg'
+[0.171s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['colcon_meta']
+[0.171s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'colcon_meta'
+[0.171s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['ros']
+[0.171s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ros'
+[0.201s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['cmake', 'python']
+[0.201s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'cmake'
+[0.201s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'python'
+[0.201s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['python_setup_py']
+[0.201s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'python_setup_py'
+[0.202s] Level 1:colcon.colcon_core.package_identification:_identify(build) by extensions ['ignore', 'ignore_ament_install']
+[0.202s] Level 1:colcon.colcon_core.package_identification:_identify(build) by extension 'ignore'
+[0.202s] Level 1:colcon.colcon_core.package_identification:_identify(build) ignored
+[0.202s] Level 1:colcon.colcon_core.package_identification:_identify(install) by extensions ['ignore', 'ignore_ament_install']
+[0.202s] Level 1:colcon.colcon_core.package_identification:_identify(install) by extension 'ignore'
+[0.202s] Level 1:colcon.colcon_core.package_identification:_identify(install) ignored
+[0.202s] Level 1:colcon.colcon_core.package_identification:_identify(log) by extensions ['ignore', 'ignore_ament_install']
+[0.202s] Level 1:colcon.colcon_core.package_identification:_identify(log) by extension 'ignore'
+[0.202s] Level 1:colcon.colcon_core.package_identification:_identify(log) ignored
+[0.202s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['ignore', 'ignore_ament_install']
+[0.202s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'ignore'
+[0.202s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'ignore_ament_install'
+[0.202s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['colcon_pkg']
+[0.202s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'colcon_pkg'
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['colcon_meta']
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'colcon_meta'
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['ros']
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'ros'
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['cmake', 'python']
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'cmake'
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'python'
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['python_setup_py']
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'python_setup_py'
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src/arm_control_pkg) by extensions ['ignore', 'ignore_ament_install']
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src/arm_control_pkg) by extension 'ignore'
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src/arm_control_pkg) by extension 'ignore_ament_install'
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src/arm_control_pkg) by extensions ['colcon_pkg']
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src/arm_control_pkg) by extension 'colcon_pkg'
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src/arm_control_pkg) by extensions ['colcon_meta']
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src/arm_control_pkg) by extension 'colcon_meta'
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src/arm_control_pkg) by extensions ['ros']
+[0.203s] Level 1:colcon.colcon_core.package_identification:_identify(src/arm_control_pkg) by extension 'ros'
+[0.206s] DEBUG:colcon.colcon_core.package_identification:Package 'src/arm_control_pkg' with type 'ros.ament_python' and name 'arm_control_pkg'
+[0.206s] Level 1:colcon.colcon_core.package_identification:_identify(src/interfaces_pkg) by extensions ['ignore', 'ignore_ament_install']
+[0.206s] Level 1:colcon.colcon_core.package_identification:_identify(src/interfaces_pkg) by extension 'ignore'
+[0.206s] Level 1:colcon.colcon_core.package_identification:_identify(src/interfaces_pkg) by extension 'ignore_ament_install'
+[0.206s] Level 1:colcon.colcon_core.package_identification:_identify(src/interfaces_pkg) by extensions ['colcon_pkg']
+[0.206s] Level 1:colcon.colcon_core.package_identification:_identify(src/interfaces_pkg) by extension 'colcon_pkg'
+[0.206s] Level 1:colcon.colcon_core.package_identification:_identify(src/interfaces_pkg) by extensions ['colcon_meta']
+[0.206s] Level 1:colcon.colcon_core.package_identification:_identify(src/interfaces_pkg) by extension 'colcon_meta'
+[0.206s] Level 1:colcon.colcon_core.package_identification:_identify(src/interfaces_pkg) by extensions ['ros']
+[0.206s] Level 1:colcon.colcon_core.package_identification:_identify(src/interfaces_pkg) by extension 'ros'
+[0.207s] DEBUG:colcon.colcon_core.package_identification:Package 'src/interfaces_pkg' with type 'ros.ament_cmake' and name 'interfaces_pkg'
+[0.207s] Level 1:colcon.colcon_core.package_identification:_identify(src/nav_pkg) by extensions ['ignore', 'ignore_ament_install']
+[0.207s] Level 1:colcon.colcon_core.package_identification:_identify(src/nav_pkg) by extension 'ignore'
+[0.207s] Level 1:colcon.colcon_core.package_identification:_identify(src/nav_pkg) by extension 'ignore_ament_install'
+[0.207s] Level 1:colcon.colcon_core.package_identification:_identify(src/nav_pkg) by extensions ['colcon_pkg']
+[0.207s] Level 1:colcon.colcon_core.package_identification:_identify(src/nav_pkg) by extension 'colcon_pkg'
+[0.207s] Level 1:colcon.colcon_core.package_identification:_identify(src/nav_pkg) by extensions ['colcon_meta']
+[0.207s] Level 1:colcon.colcon_core.package_identification:_identify(src/nav_pkg) by extension 'colcon_meta'
+[0.207s] Level 1:colcon.colcon_core.package_identification:_identify(src/nav_pkg) by extensions ['ros']
+[0.208s] Level 1:colcon.colcon_core.package_identification:_identify(src/nav_pkg) by extension 'ros'
+[0.208s] DEBUG:colcon.colcon_core.package_identification:Package 'src/nav_pkg' with type 'ros.ament_python' and name 'nav_pkg'
+[0.208s] Level 1:colcon.colcon_core.package_identification:_identify(src/vision_pkg) by extensions ['ignore', 'ignore_ament_install']
+[0.208s] Level 1:colcon.colcon_core.package_identification:_identify(src/vision_pkg) by extension 'ignore'
+[0.208s] Level 1:colcon.colcon_core.package_identification:_identify(src/vision_pkg) by extension 'ignore_ament_install'
+[0.208s] Level 1:colcon.colcon_core.package_identification:_identify(src/vision_pkg) by extensions ['colcon_pkg']
+[0.209s] Level 1:colcon.colcon_core.package_identification:_identify(src/vision_pkg) by extension 'colcon_pkg'
+[0.209s] Level 1:colcon.colcon_core.package_identification:_identify(src/vision_pkg) by extensions ['colcon_meta']
+[0.209s] Level 1:colcon.colcon_core.package_identification:_identify(src/vision_pkg) by extension 'colcon_meta'
+[0.209s] Level 1:colcon.colcon_core.package_identification:_identify(src/vision_pkg) by extensions ['ros']
+[0.209s] Level 1:colcon.colcon_core.package_identification:_identify(src/vision_pkg) by extension 'ros'
+[0.209s] DEBUG:colcon.colcon_core.package_identification:Package 'src/vision_pkg' with type 'ros.ament_python' and name 'vision_pkg'
+[0.209s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) using defaults
+[0.209s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) discover
+[0.209s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) using defaults
+[0.209s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) discover
+[0.210s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) using defaults
+[0.231s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) check parameters
+[0.231s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) discover
+[0.234s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 287 installed packages in /opt/ros/jazzy
+[0.235s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) using defaults
+[0.276s] Level 5:colcon.colcon_core.verb:set package 'arm_control_pkg' build argument 'cmake_args' from command line to 'None'
+[0.276s] Level 5:colcon.colcon_core.verb:set package 'arm_control_pkg' build argument 'cmake_target' from command line to 'None'
+[0.276s] Level 5:colcon.colcon_core.verb:set package 'arm_control_pkg' build argument 'cmake_target_skip_unavailable' from command line to 'False'
+[0.276s] Level 5:colcon.colcon_core.verb:set package 'arm_control_pkg' build argument 'cmake_clean_cache' from command line to 'False'
+[0.276s] Level 5:colcon.colcon_core.verb:set package 'arm_control_pkg' build argument 'cmake_clean_first' from command line to 'False'
+[0.276s] Level 5:colcon.colcon_core.verb:set package 'arm_control_pkg' build argument 'cmake_force_configure' from command line to 'False'
+[0.276s] Level 5:colcon.colcon_core.verb:set package 'arm_control_pkg' build argument 'ament_cmake_args' from command line to 'None'
+[0.276s] Level 5:colcon.colcon_core.verb:set package 'arm_control_pkg' build argument 'catkin_cmake_args' from command line to 'None'
+[0.276s] Level 5:colcon.colcon_core.verb:set package 'arm_control_pkg' build argument 'catkin_skip_building_tests' from command line to 'False'
+[0.276s] DEBUG:colcon.colcon_core.verb:Building package 'arm_control_pkg' with the following arguments: {'ament_cmake_args': None, 'build_base': '/home/fivejaewin/NILARM/build/arm_control_pkg', 'catkin_cmake_args': None, 'catkin_skip_building_tests': False, 'cmake_args': None, 'cmake_clean_cache': False, 'cmake_clean_first': False, 'cmake_force_configure': False, 'cmake_target': None, 'cmake_target_skip_unavailable': False, 'install_base': '/home/fivejaewin/NILARM/install/arm_control_pkg', 'merge_install': False, 'path': '/home/fivejaewin/NILARM/src/arm_control_pkg', 'symlink_install': False, 'test_result_base': None}
+[0.276s] Level 5:colcon.colcon_core.verb:set package 'interfaces_pkg' build argument 'cmake_args' from command line to 'None'
+[0.276s] Level 5:colcon.colcon_core.verb:set package 'interfaces_pkg' build argument 'cmake_target' from command line to 'None'
+[0.276s] Level 5:colcon.colcon_core.verb:set package 'interfaces_pkg' build argument 'cmake_target_skip_unavailable' from command line to 'False'
+[0.276s] Level 5:colcon.colcon_core.verb:set package 'interfaces_pkg' build argument 'cmake_clean_cache' from command line to 'False'
+[0.276s] Level 5:colcon.colcon_core.verb:set package 'interfaces_pkg' build argument 'cmake_clean_first' from command line to 'False'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'interfaces_pkg' build argument 'cmake_force_configure' from command line to 'False'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'interfaces_pkg' build argument 'ament_cmake_args' from command line to 'None'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'interfaces_pkg' build argument 'catkin_cmake_args' from command line to 'None'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'interfaces_pkg' build argument 'catkin_skip_building_tests' from command line to 'False'
+[0.277s] DEBUG:colcon.colcon_core.verb:Building package 'interfaces_pkg' with the following arguments: {'ament_cmake_args': None, 'build_base': '/home/fivejaewin/NILARM/build/interfaces_pkg', 'catkin_cmake_args': None, 'catkin_skip_building_tests': False, 'cmake_args': None, 'cmake_clean_cache': False, 'cmake_clean_first': False, 'cmake_force_configure': False, 'cmake_target': None, 'cmake_target_skip_unavailable': False, 'install_base': '/home/fivejaewin/NILARM/install/interfaces_pkg', 'merge_install': False, 'path': '/home/fivejaewin/NILARM/src/interfaces_pkg', 'symlink_install': False, 'test_result_base': None}
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'nav_pkg' build argument 'cmake_args' from command line to 'None'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'nav_pkg' build argument 'cmake_target' from command line to 'None'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'nav_pkg' build argument 'cmake_target_skip_unavailable' from command line to 'False'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'nav_pkg' build argument 'cmake_clean_cache' from command line to 'False'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'nav_pkg' build argument 'cmake_clean_first' from command line to 'False'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'nav_pkg' build argument 'cmake_force_configure' from command line to 'False'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'nav_pkg' build argument 'ament_cmake_args' from command line to 'None'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'nav_pkg' build argument 'catkin_cmake_args' from command line to 'None'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'nav_pkg' build argument 'catkin_skip_building_tests' from command line to 'False'
+[0.277s] DEBUG:colcon.colcon_core.verb:Building package 'nav_pkg' with the following arguments: {'ament_cmake_args': None, 'build_base': '/home/fivejaewin/NILARM/build/nav_pkg', 'catkin_cmake_args': None, 'catkin_skip_building_tests': False, 'cmake_args': None, 'cmake_clean_cache': False, 'cmake_clean_first': False, 'cmake_force_configure': False, 'cmake_target': None, 'cmake_target_skip_unavailable': False, 'install_base': '/home/fivejaewin/NILARM/install/nav_pkg', 'merge_install': False, 'path': '/home/fivejaewin/NILARM/src/nav_pkg', 'symlink_install': False, 'test_result_base': None}
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'vision_pkg' build argument 'cmake_args' from command line to 'None'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'vision_pkg' build argument 'cmake_target' from command line to 'None'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'vision_pkg' build argument 'cmake_target_skip_unavailable' from command line to 'False'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'vision_pkg' build argument 'cmake_clean_cache' from command line to 'False'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'vision_pkg' build argument 'cmake_clean_first' from command line to 'False'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'vision_pkg' build argument 'cmake_force_configure' from command line to 'False'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'vision_pkg' build argument 'ament_cmake_args' from command line to 'None'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'vision_pkg' build argument 'catkin_cmake_args' from command line to 'None'
+[0.277s] Level 5:colcon.colcon_core.verb:set package 'vision_pkg' build argument 'catkin_skip_building_tests' from command line to 'False'
+[0.277s] DEBUG:colcon.colcon_core.verb:Building package 'vision_pkg' with the following arguments: {'ament_cmake_args': None, 'build_base': '/home/fivejaewin/NILARM/build/vision_pkg', 'catkin_cmake_args': None, 'catkin_skip_building_tests': False, 'cmake_args': None, 'cmake_clean_cache': False, 'cmake_clean_first': False, 'cmake_force_configure': False, 'cmake_target': None, 'cmake_target_skip_unavailable': False, 'install_base': '/home/fivejaewin/NILARM/install/vision_pkg', 'merge_install': False, 'path': '/home/fivejaewin/NILARM/src/vision_pkg', 'symlink_install': False, 'test_result_base': None}
+[0.278s] INFO:colcon.colcon_core.executor:Executing jobs using 'parallel' executor
+[0.279s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:run_until_complete
+[0.279s] INFO:colcon.colcon_ros.task.ament_python.build:Building ROS package in '/home/fivejaewin/NILARM/src/arm_control_pkg' with build type 'ament_python'
+[0.279s] Level 1:colcon.colcon_core.shell:create_environment_hook('arm_control_pkg', 'ament_prefix_path')
+[0.282s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_core.shell.bat': Not used on non-Windows systems
+[0.282s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/arm_control_pkg/share/arm_control_pkg/hook/ament_prefix_path.ps1'
+[0.283s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/fivejaewin/NILARM/install/arm_control_pkg/share/arm_control_pkg/hook/ament_prefix_path.dsv'
+[0.283s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/arm_control_pkg/share/arm_control_pkg/hook/ament_prefix_path.sh'
+[0.284s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.284s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.287s] INFO:colcon.colcon_ros.task.ament_cmake.build:Building ROS package in '/home/fivejaewin/NILARM/src/interfaces_pkg' with build type 'ament_cmake'
+[0.287s] INFO:colcon.colcon_cmake.task.cmake.build:Building CMake package in '/home/fivejaewin/NILARM/src/interfaces_pkg'
+[0.287s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.287s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.290s] INFO:colcon.colcon_ros.task.ament_python.build:Building ROS package in '/home/fivejaewin/NILARM/src/nav_pkg' with build type 'ament_python'
+[0.290s] Level 1:colcon.colcon_core.shell:create_environment_hook('nav_pkg', 'ament_prefix_path')
+[0.291s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/nav_pkg/share/nav_pkg/hook/ament_prefix_path.ps1'
+[0.291s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/fivejaewin/NILARM/install/nav_pkg/share/nav_pkg/hook/ament_prefix_path.dsv'
+[0.291s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/nav_pkg/share/nav_pkg/hook/ament_prefix_path.sh'
+[0.292s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.292s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.295s] INFO:colcon.colcon_ros.task.ament_python.build:Building ROS package in '/home/fivejaewin/NILARM/src/vision_pkg' with build type 'ament_python'
+[0.295s] Level 1:colcon.colcon_core.shell:create_environment_hook('vision_pkg', 'ament_prefix_path')
+[0.295s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/vision_pkg/share/vision_pkg/hook/ament_prefix_path.ps1'
+[0.296s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/fivejaewin/NILARM/install/vision_pkg/share/vision_pkg/hook/ament_prefix_path.dsv'
+[0.296s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/vision_pkg/share/vision_pkg/hook/ament_prefix_path.sh'
+[0.297s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.297s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.550s] INFO:colcon.colcon_core.task.python.build:Building Python package in '/home/fivejaewin/NILARM/src/arm_control_pkg'
+[0.550s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.550s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.557s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/fivejaewin/NILARM/build/interfaces_pkg': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/fivejaewin/NILARM/src/interfaces_pkg -DCMAKE_INSTALL_PREFIX=/home/fivejaewin/NILARM/install/interfaces_pkg
+[0.798s] INFO:colcon.colcon_core.task.python.build:Building Python package in '/home/fivejaewin/NILARM/src/nav_pkg'
+[0.798s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.798s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[1.054s] INFO:colcon.colcon_core.task.python.build:Building Python package in '/home/fivejaewin/NILARM/src/vision_pkg'
+[1.054s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[1.054s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[1.765s] DEBUG:colcon.colcon_core.task.python.build:Available setuptools commands: compile_catalog, build_ext, install_headers, build_scripts, egg_info, symlink_data, develop, install_scripts, setopt, install_data, register, init_catalog, bdist_dumb, saveopts, alias, build, install, bdist_egg, check, extract_messages, install_lib, upload, build_py, update_catalog, editable_wheel, dist_info, install_egg_info, easy_install, build_clib, upload_docs, rotate, bdist, test, clean, sdist, bdist_wheel, bdist_rpm
+[1.768s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/fivejaewin/NILARM/src/vision_pkg': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/fivejaewin/NILARM/build/vision_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/fivejaewin/NILARM/install/vision_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/vision_pkg build --build-base /home/fivejaewin/NILARM/build/vision_pkg/build install --record /home/fivejaewin/NILARM/build/vision_pkg/install.log --install-scripts $base/lib/vision_pkg --single-version-externally-managed install_data
+[1.833s] DEBUG:colcon.colcon_core.task.python.build:Available setuptools commands: compile_catalog, build_ext, install_headers, build_scripts, egg_info, symlink_data, develop, install_scripts, setopt, install_data, register, init_catalog, bdist_dumb, saveopts, alias, build, install, bdist_egg, check, extract_messages, install_lib, upload, build_py, update_catalog, editable_wheel, dist_info, install_egg_info, easy_install, build_clib, upload_docs, rotate, bdist, test, clean, sdist, bdist_wheel, bdist_rpm
+[1.837s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/fivejaewin/NILARM/src/nav_pkg': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/fivejaewin/NILARM/build/nav_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/fivejaewin/NILARM/install/nav_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/nav_pkg build --build-base /home/fivejaewin/NILARM/build/nav_pkg/build install --record /home/fivejaewin/NILARM/build/nav_pkg/install.log --install-scripts $base/lib/nav_pkg --single-version-externally-managed install_data
+[1.860s] DEBUG:colcon.colcon_core.task.python.build:Available setuptools commands: compile_catalog, build_ext, install_headers, build_scripts, egg_info, symlink_data, develop, install_scripts, setopt, install_data, register, init_catalog, bdist_dumb, saveopts, alias, build, install, bdist_egg, check, extract_messages, install_lib, upload, build_py, update_catalog, editable_wheel, dist_info, install_egg_info, easy_install, build_clib, upload_docs, rotate, bdist, test, clean, sdist, bdist_wheel, bdist_rpm
+[1.863s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/fivejaewin/NILARM/src/arm_control_pkg': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/fivejaewin/NILARM/build/arm_control_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/fivejaewin/NILARM/install/arm_control_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/arm_control_pkg build --build-base /home/fivejaewin/NILARM/build/arm_control_pkg/build install --record /home/fivejaewin/NILARM/build/arm_control_pkg/install.log --install-scripts $base/lib/arm_control_pkg --single-version-externally-managed install_data
+[2.357s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/fivejaewin/NILARM/src/vision_pkg' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/fivejaewin/NILARM/build/vision_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/fivejaewin/NILARM/install/vision_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/vision_pkg build --build-base /home/fivejaewin/NILARM/build/vision_pkg/build install --record /home/fivejaewin/NILARM/build/vision_pkg/install.log --install-scripts $base/lib/vision_pkg --single-version-externally-managed install_data
+[2.360s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/vision_pkg' for CMake module files
+[2.361s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/vision_pkg' for CMake config files
+[2.362s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/vision_pkg/lib'
+[2.362s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/vision_pkg/bin'
+[2.363s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/vision_pkg/lib/pkgconfig/vision_pkg.pc'
+[2.363s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/vision_pkg/lib/python3.12/site-packages'
+[2.363s] Level 1:colcon.colcon_core.shell:create_environment_hook('vision_pkg', 'pythonpath')
+[2.363s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/vision_pkg/share/vision_pkg/hook/pythonpath.ps1'
+[2.364s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/fivejaewin/NILARM/install/vision_pkg/share/vision_pkg/hook/pythonpath.dsv'
+[2.365s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/vision_pkg/share/vision_pkg/hook/pythonpath.sh'
+[2.366s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/vision_pkg/bin'
+[2.366s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(vision_pkg)
+[2.366s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/vision_pkg/share/vision_pkg/package.ps1'
+[2.368s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/fivejaewin/NILARM/install/vision_pkg/share/vision_pkg/package.dsv'
+[2.368s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/vision_pkg/share/vision_pkg/package.sh'
+[2.369s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/vision_pkg/share/vision_pkg/package.bash'
+[2.370s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/vision_pkg/share/vision_pkg/package.zsh'
+[2.371s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/fivejaewin/NILARM/install/vision_pkg/share/colcon-core/packages/vision_pkg)
+[2.413s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/nav_pkg' for CMake module files
+[2.414s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/fivejaewin/NILARM/src/nav_pkg' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/fivejaewin/NILARM/build/nav_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/fivejaewin/NILARM/install/nav_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/nav_pkg build --build-base /home/fivejaewin/NILARM/build/nav_pkg/build install --record /home/fivejaewin/NILARM/build/nav_pkg/install.log --install-scripts $base/lib/nav_pkg --single-version-externally-managed install_data
+[2.414s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/nav_pkg' for CMake config files
+[2.415s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/nav_pkg/lib'
+[2.415s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/nav_pkg/bin'
+[2.415s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/nav_pkg/lib/pkgconfig/nav_pkg.pc'
+[2.415s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/nav_pkg/lib/python3.12/site-packages'
+[2.416s] Level 1:colcon.colcon_core.shell:create_environment_hook('nav_pkg', 'pythonpath')
+[2.416s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/nav_pkg/share/nav_pkg/hook/pythonpath.ps1'
+[2.416s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/fivejaewin/NILARM/install/nav_pkg/share/nav_pkg/hook/pythonpath.dsv'
+[2.417s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/nav_pkg/share/nav_pkg/hook/pythonpath.sh'
+[2.418s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/nav_pkg/bin'
+[2.418s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(nav_pkg)
+[2.418s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/nav_pkg/share/nav_pkg/package.ps1'
+[2.419s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/fivejaewin/NILARM/install/nav_pkg/share/nav_pkg/package.dsv'
+[2.420s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/nav_pkg/share/nav_pkg/package.sh'
+[2.420s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/nav_pkg/share/nav_pkg/package.bash'
+[2.421s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/nav_pkg/share/nav_pkg/package.zsh'
+[2.421s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/fivejaewin/NILARM/install/nav_pkg/share/colcon-core/packages/nav_pkg)
+[2.604s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/arm_control_pkg' for CMake module files
+[2.604s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/fivejaewin/NILARM/src/arm_control_pkg' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/fivejaewin/NILARM/build/arm_control_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/fivejaewin/NILARM/install/arm_control_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/arm_control_pkg build --build-base /home/fivejaewin/NILARM/build/arm_control_pkg/build install --record /home/fivejaewin/NILARM/build/arm_control_pkg/install.log --install-scripts $base/lib/arm_control_pkg --single-version-externally-managed install_data
+[2.605s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/arm_control_pkg' for CMake config files
+[2.605s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/arm_control_pkg/lib'
+[2.606s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/arm_control_pkg/bin'
+[2.606s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/arm_control_pkg/lib/pkgconfig/arm_control_pkg.pc'
+[2.606s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/arm_control_pkg/lib/python3.12/site-packages'
+[2.606s] Level 1:colcon.colcon_core.shell:create_environment_hook('arm_control_pkg', 'pythonpath')
+[2.606s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/arm_control_pkg/share/arm_control_pkg/hook/pythonpath.ps1'
+[2.607s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/fivejaewin/NILARM/install/arm_control_pkg/share/arm_control_pkg/hook/pythonpath.dsv'
+[2.608s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/arm_control_pkg/share/arm_control_pkg/hook/pythonpath.sh'
+[2.609s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/arm_control_pkg/bin'
+[2.609s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(arm_control_pkg)
+[2.609s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/arm_control_pkg/share/arm_control_pkg/package.ps1'
+[2.610s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/fivejaewin/NILARM/install/arm_control_pkg/share/arm_control_pkg/package.dsv'
+[2.611s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/arm_control_pkg/share/arm_control_pkg/package.sh'
+[2.611s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/arm_control_pkg/share/arm_control_pkg/package.bash'
+[2.612s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/arm_control_pkg/share/arm_control_pkg/package.zsh'
+[2.612s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/fivejaewin/NILARM/install/arm_control_pkg/share/colcon-core/packages/arm_control_pkg)
+[4.761s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/fivejaewin/NILARM/build/interfaces_pkg' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/fivejaewin/NILARM/src/interfaces_pkg -DCMAKE_INSTALL_PREFIX=/home/fivejaewin/NILARM/install/interfaces_pkg
+[4.763s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/fivejaewin/NILARM/build/interfaces_pkg': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/fivejaewin/NILARM/build/interfaces_pkg -- -j12 -l12
+[13.015s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/fivejaewin/NILARM/build/interfaces_pkg' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/fivejaewin/NILARM/build/interfaces_pkg -- -j12 -l12
+[13.031s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/fivejaewin/NILARM/build/interfaces_pkg': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --install /home/fivejaewin/NILARM/build/interfaces_pkg
+[13.162s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(interfaces_pkg)
+[13.162s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/interfaces_pkg' for CMake module files
+[13.162s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/fivejaewin/NILARM/build/interfaces_pkg' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --install /home/fivejaewin/NILARM/build/interfaces_pkg
+[13.164s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/interfaces_pkg' for CMake config files
+[13.164s] Level 1:colcon.colcon_core.shell:create_environment_hook('interfaces_pkg', 'cmake_prefix_path')
+[13.164s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/cmake_prefix_path.ps1'
+[13.165s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/cmake_prefix_path.dsv'
+[13.166s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/cmake_prefix_path.sh'
+[13.166s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/interfaces_pkg/lib'
+[13.166s] Level 1:colcon.colcon_core.shell:create_environment_hook('interfaces_pkg', 'ld_library_path_lib')
+[13.167s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/ld_library_path_lib.ps1'
+[13.167s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/ld_library_path_lib.dsv'
+[13.168s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/ld_library_path_lib.sh'
+[13.168s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/interfaces_pkg/bin'
+[13.168s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/interfaces_pkg/lib/pkgconfig/interfaces_pkg.pc'
+[13.169s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/interfaces_pkg/lib/python3.12/site-packages'
+[13.169s] Level 1:colcon.colcon_core.shell:create_environment_hook('interfaces_pkg', 'pythonpath')
+[13.169s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/pythonpath.ps1'
+[13.170s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/pythonpath.dsv'
+[13.170s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/pythonpath.sh'
+[13.171s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/interfaces_pkg/bin'
+[13.171s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/package.ps1'
+[13.172s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/package.dsv'
+[13.173s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/package.sh'
+[13.174s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/package.bash'
+[13.174s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/package.zsh'
+[13.175s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/fivejaewin/NILARM/install/interfaces_pkg/share/colcon-core/packages/interfaces_pkg)
+[13.176s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(interfaces_pkg)
+[13.176s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/interfaces_pkg' for CMake module files
+[13.177s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/interfaces_pkg' for CMake config files
+[13.177s] Level 1:colcon.colcon_core.shell:create_environment_hook('interfaces_pkg', 'cmake_prefix_path')
+[13.178s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/cmake_prefix_path.ps1'
+[13.178s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/cmake_prefix_path.dsv'
+[13.179s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/cmake_prefix_path.sh'
+[13.179s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/interfaces_pkg/lib'
+[13.179s] Level 1:colcon.colcon_core.shell:create_environment_hook('interfaces_pkg', 'ld_library_path_lib')
+[13.180s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/ld_library_path_lib.ps1'
+[13.180s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/ld_library_path_lib.dsv'
+[13.180s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/ld_library_path_lib.sh'
+[13.181s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/interfaces_pkg/bin'
+[13.181s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/interfaces_pkg/lib/pkgconfig/interfaces_pkg.pc'
+[13.181s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/interfaces_pkg/lib/python3.12/site-packages'
+[13.181s] Level 1:colcon.colcon_core.shell:create_environment_hook('interfaces_pkg', 'pythonpath')
+[13.181s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/pythonpath.ps1'
+[13.182s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/pythonpath.dsv'
+[13.182s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/hook/pythonpath.sh'
+[13.183s] Level 1:colcon.colcon_core.environment:checking '/home/fivejaewin/NILARM/install/interfaces_pkg/bin'
+[13.183s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/package.ps1'
+[13.184s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/package.dsv'
+[13.185s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/package.sh'
+[13.185s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/package.bash'
+[13.186s] INFO:colcon.colcon_core.shell:Creating package script '/home/fivejaewin/NILARM/install/interfaces_pkg/share/interfaces_pkg/package.zsh'
+[13.186s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/fivejaewin/NILARM/install/interfaces_pkg/share/colcon-core/packages/interfaces_pkg)
+[13.186s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:closing loop
+[13.187s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:loop closed
+[13.187s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:run_until_complete finished with '0'
+[13.187s] DEBUG:colcon.colcon_core.event_reactor:joining thread
+[13.196s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.terminal_notifier': Not used on non-Darwin systems
+[13.196s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.win32': Not used on non-Windows systems
+[13.197s] INFO:colcon.colcon_notification.desktop_notification:Sending desktop notification using 'notify2'
+[13.218s] DEBUG:colcon.colcon_core.event_reactor:joined thread
+[13.219s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/fivejaewin/NILARM/install/local_setup.ps1'
+[13.221s] INFO:colcon.colcon_core.shell:Creating prefix util module '/home/fivejaewin/NILARM/install/_local_setup_util_ps1.py'
+[13.223s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/fivejaewin/NILARM/install/setup.ps1'
+[13.225s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/fivejaewin/NILARM/install/local_setup.sh'
+[13.226s] INFO:colcon.colcon_core.shell:Creating prefix util module '/home/fivejaewin/NILARM/install/_local_setup_util_sh.py'
+[13.227s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/fivejaewin/NILARM/install/setup.sh'
+[13.229s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/fivejaewin/NILARM/install/local_setup.bash'
+[13.230s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/fivejaewin/NILARM/install/setup.bash'
+[13.232s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/fivejaewin/NILARM/install/local_setup.zsh'
+[13.233s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/fivejaewin/NILARM/install/setup.zsh'

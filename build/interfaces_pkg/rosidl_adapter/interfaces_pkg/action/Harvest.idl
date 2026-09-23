@@ -1,0 +1,36 @@
+// generated from rosidl_adapter/resource/action.idl.em
+// with input from interfaces_pkg/action/Harvest.action
+// generated code does not contain a copyright notice
+
+
+module interfaces_pkg {
+  module action {
+    @verbatim (language="comment", text=
+      "Goal — 수확 시작 요청")
+    struct Harvest_Goal {
+      @verbatim (language="comment", text=
+        "이번에 몇 개 수확할지 목표 !git")
+      int32 target_count;
+    };
+    @verbatim (language="comment", text=
+      "Result — 수확 종료 시 결과")
+    struct Harvest_Result {
+      boolean success;
+
+      @verbatim (language="comment", text=
+        "실제로 수확한 개수")
+      int32 harvested_count;
+    };
+    @verbatim (language="comment", text=
+      "Feedback — 수확 중 실시간 진행상황")
+    struct Harvest_Feedback {
+      @verbatim (language="comment", text=
+        "지금까지 몇 개 땄는지 !!")
+      int32 current_count;
+
+      @verbatim (language="comment", text=
+        "\"searching\", \"grasping\", \"placing\" 등")
+      string status;
+    };
+  };
+};

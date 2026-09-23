@@ -1,0 +1,1 @@
+/home/fivejaewin/NILARM/build/interfaces_pkg/rosidl_typesupport_introspection_cpp/interfaces_pkg/msg/detail/fruit_detection__rosidl_typesupport_introspection_cpp.hpp

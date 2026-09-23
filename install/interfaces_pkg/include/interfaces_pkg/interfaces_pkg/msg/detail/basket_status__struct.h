@@ -1,0 +1,1 @@
+/home/fivejaewin/NILARM/build/interfaces_pkg/rosidl_generator_c/interfaces_pkg/msg/detail/basket_status__struct.h

@@ -1,0 +1,66 @@
+{
+  "type_description_msg": {
+    "type_description": {
+      "type_name": "interfaces_pkg/action/DumpBasket_GetResult_Response",
+      "fields": [
+        {
+          "name": "status",
+          "type": {
+            "type_id": 2,
+            "capacity": 0,
+            "string_capacity": 0,
+            "nested_type_name": ""
+          },
+          "default_value": ""
+        },
+        {
+          "name": "result",
+          "type": {
+            "type_id": 1,
+            "capacity": 0,
+            "string_capacity": 0,
+            "nested_type_name": "interfaces_pkg/action/DumpBasket_Result"
+          },
+          "default_value": ""
+        }
+      ]
+    },
+    "referenced_type_descriptions": [
+      {
+        "type_name": "interfaces_pkg/action/DumpBasket_Result",
+        "fields": [
+          {
+            "name": "success",
+            "type": {
+              "type_id": 15,
+              "capacity": 0,
+              "string_capacity": 0,
+              "nested_type_name": ""
+            },
+            "default_value": ""
+          },
+          {
+            "name": "duration_sec",
+            "type": {
+              "type_id": 10,
+              "capacity": 0,
+              "string_capacity": 0,
+              "nested_type_name": ""
+            },
+            "default_value": ""
+          }
+        ]
+      }
+    ]
+  },
+  "type_hashes": [
+    {
+      "type_name": "interfaces_pkg/action/DumpBasket_GetResult_Response",
+      "hash_string": "RIHS01_84572f8ad4b69fcbd299f644c5828c7b90de55737e4b61ab58264cc9fea341d2"
+    },
+    {
+      "type_name": "interfaces_pkg/action/DumpBasket_Result",
+      "hash_string": "RIHS01_db35988663d8fb7634e4bc91997a8c6ce796659153820f3529df657d4f65b7ad"
+    }
+  ]
+}

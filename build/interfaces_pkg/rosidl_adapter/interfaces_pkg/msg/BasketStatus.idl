@@ -1,0 +1,22 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from interfaces_pkg/msg/BasketStatus.msg
+// generated code does not contain a copyright notice
+
+
+module interfaces_pkg {
+  module msg {
+    struct BasketStatus {
+      @verbatim (language="comment", text=
+        "현재 적재된 개수")
+      int32 weight;
+
+      @verbatim (language="comment", text=
+        "소형바구니 최대 용량")
+      int32 maxweight;
+
+      @verbatim (language="comment", text=
+        "count >= capacity 여부")
+      boolean is_full;
+    };
+  };
+};

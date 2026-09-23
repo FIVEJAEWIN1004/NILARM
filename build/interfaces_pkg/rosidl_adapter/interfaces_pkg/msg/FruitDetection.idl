@@ -1,0 +1,26 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from interfaces_pkg/msg/FruitDetection.msg
+// generated code does not contain a copyright notice
+
+
+module interfaces_pkg {
+  module msg {
+    struct FruitDetection {
+      @verbatim (language="comment", text=
+        "카메라/팔 기준 상대좌표 (m)")
+      float x;
+
+      float y;
+
+      float z;
+
+      @verbatim (language="comment", text=
+        "\"ripe\"(익음) 또는 \"bad\"(불량)")
+      string quality;
+
+      @verbatim (language="comment", text=
+        "탐지 신뢰도 0.0~1.0")
+      float confidence;
+    };
+  };
+};

@@ -1,0 +1,31 @@
+running egg_info
+creating ../../build/arm_control_pkg/arm_control_pkg.egg-info
+writing ../../build/arm_control_pkg/arm_control_pkg.egg-info/PKG-INFO
+writing dependency_links to ../../build/arm_control_pkg/arm_control_pkg.egg-info/dependency_links.txt
+writing requirements to ../../build/arm_control_pkg/arm_control_pkg.egg-info/requires.txt
+writing top-level names to ../../build/arm_control_pkg/arm_control_pkg.egg-info/top_level.txt
+writing manifest file '../../build/arm_control_pkg/arm_control_pkg.egg-info/SOURCES.txt'
+reading manifest file '../../build/arm_control_pkg/arm_control_pkg.egg-info/SOURCES.txt'
+adding license file 'LICENSE'
+writing manifest file '../../build/arm_control_pkg/arm_control_pkg.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/fivejaewin/NILARM/build/arm_control_pkg/build
+creating /home/fivejaewin/NILARM/build/arm_control_pkg/build/lib
+creating /home/fivejaewin/NILARM/build/arm_control_pkg/build/lib/arm_control_pkg
+copying arm_control_pkg/__init__.py -> /home/fivejaewin/NILARM/build/arm_control_pkg/build/lib/arm_control_pkg
+running install
+running install_lib
+creating /home/fivejaewin/NILARM/install/arm_control_pkg/lib/python3.12/site-packages/arm_control_pkg
+copying /home/fivejaewin/NILARM/build/arm_control_pkg/build/lib/arm_control_pkg/__init__.py -> /home/fivejaewin/NILARM/install/arm_control_pkg/lib/python3.12/site-packages/arm_control_pkg
+byte-compiling /home/fivejaewin/NILARM/install/arm_control_pkg/lib/python3.12/site-packages/arm_control_pkg/__init__.py to __init__.cpython-312.pyc
+running install_data
+creating /home/fivejaewin/NILARM/install/arm_control_pkg/share/ament_index
+creating /home/fivejaewin/NILARM/install/arm_control_pkg/share/ament_index/resource_index
+creating /home/fivejaewin/NILARM/install/arm_control_pkg/share/ament_index/resource_index/packages
+copying resource/arm_control_pkg -> /home/fivejaewin/NILARM/install/arm_control_pkg/share/ament_index/resource_index/packages
+copying package.xml -> /home/fivejaewin/NILARM/install/arm_control_pkg/share/arm_control_pkg
+running install_egg_info
+Copying ../../build/arm_control_pkg/arm_control_pkg.egg-info to /home/fivejaewin/NILARM/install/arm_control_pkg/lib/python3.12/site-packages/arm_control_pkg-0.0.0-py3.12.egg-info
+running install_scripts
+writing list of installed files to '/home/fivejaewin/NILARM/build/arm_control_pkg/install.log'
