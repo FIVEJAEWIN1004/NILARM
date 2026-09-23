@@ -8,8 +8,14 @@ fi
 
 NILARM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+OMX_VENV="$HOME/venv/omx"
+
+if [[ "${VIRTUAL_ENV:-}" != "$OMX_VENV" ]]; then
+    source "$OMX_VENV/bin/activate"
+fi
+
+# 가상환경 적용 후 ROS2 경로를 마지막에 추가해야 한다.
 source /opt/ros/jazzy/setup.bash
-source "$HOME/venv/omx/bin/activate"
 
 export NILARM_REPOSITORY_ROOT="$NILARM_ROOT"
 export AMENT_PREFIX_PATH="$NILARM_ROOT/install/arm_control_pkg:${AMENT_PREFIX_PATH:-}"
