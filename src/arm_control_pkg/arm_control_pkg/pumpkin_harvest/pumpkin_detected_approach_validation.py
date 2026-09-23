@@ -24,6 +24,7 @@ import numpy as np
 from ultralytics import YOLO
 
 from omx_f import OmxFollower
+from vision_pkg.pumpkin_detection import yolo_detector
 
 
 PLANE_PATH = Path(__file__).with_name("pumpkin_plane_calibration.json")
@@ -41,7 +42,7 @@ CAMERA_HEIGHT = 480
 
 CONFIDENCE = 0.70
 YOLO_IMAGE_SIZE = 416
-TARGET_CLASS_NAMES = {"nil_pumpkin", "pumpkin"}
+TARGET_CLASS_NAMES = set(yolo_detector.DEFAULT_TARGET_CLASS_NAMES)
 STABLE_SAMPLE_COUNT = 10
 MAX_PIXEL_SPREAD = 8.0
 
@@ -158,17 +159,13 @@ def find_model_path() -> Path:
 
 
 def normalize_name(value) -> str:
-    return str(value).strip().lower()
+    """Compatibility wrapper for older harvest modules."""
+    return yolo_detector.normalize_name(value)
 
 
 def validate_model(model: YOLO) -> None:
-    names = model.names.values() if isinstance(model.names, dict) else model.names
-    available = {normalize_name(name) for name in names}
-    if not available.intersection(TARGET_CLASS_NAMES):
-        raise ValueError(
-            "모델 클래스에 nil_pumpkin 또는 pumpkin이 없습니다: "
-            f"{model.names}"
-        )
+    """Compatibility wrapper for older harvest modules."""
+    yolo_detector.validate_model(model, TARGET_CLASS_NAMES)
 
 
 def verified_camera_source() -> str:
@@ -226,21 +223,16 @@ def floor_z_at(x: float, y: float, coefficients: np.ndarray) -> float:
 
 
 def detect_valid_boxes(model: YOLO, frame: np.ndarray, image_points: np.ndarray):
-    result = model.predict(
-        source=frame,
-        conf=CONFIDENCE,
-        imgsz=YOLO_IMAGE_SIZE,
-        device="cpu",
-        verbose=False,
-    )[0]
+    result, pumpkin_boxes = yolo_detector.detect_pumpkin_boxes(
+        model,
+        frame,
+        confidence=CONFIDENCE,
+        image_size=YOLO_IMAGE_SIZE,
+        target_names=TARGET_CLASS_NAMES,
+    )
     detections = []
-    for box in result.boxes:
-        class_id = int(box.cls[0].item())
-        if normalize_name(model.names[class_id]) not in TARGET_CLASS_NAMES:
-            continue
-        x1, y1, x2, y2 = [float(value) for value in box.xyxy[0].tolist()]
-        u = (x1 + x2) / 2.0
-        v = (y1 + y2) / 2.0
+    for box in pumpkin_boxes:
+        u, v = box.center
         inside, margin_px = inside_hull((u, v), image_points)
         if not inside:
             continue
@@ -248,7 +240,7 @@ def detect_valid_boxes(model: YOLO, frame: np.ndarray, image_points: np.ndarray)
             {
                 "u": u,
                 "v": v,
-                "confidence": float(box.conf[0].item()),
+                "confidence": box.confidence,
                 "margin_px": margin_px,
             }
         )

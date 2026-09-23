@@ -24,6 +24,7 @@ import omx_f.robot as omx_robot
 from . import pumpkin_detected_approach_validation as base
 from . import pumpkin_multiangle_approach_validation as multi
 from vision_pkg.pumpkin_detection import color_classifier as hsv_filter
+from vision_pkg.pumpkin_detection import yolo_detector
 from . import pumpkin_orange_auto_grasp_validation as grasp
 
 
@@ -198,13 +199,13 @@ def detect_frame(
     commanded_offset_deg: float,
     measured_offset_deg: float,
 ):
-    result = model.predict(
-        source=frame,
-        conf=base.CONFIDENCE,
-        imgsz=base.YOLO_IMAGE_SIZE,
-        device="cpu",
-        verbose=False,
-    )[0]
+    _, pumpkin_boxes = yolo_detector.detect_pumpkin_boxes(
+        model,
+        frame,
+        confidence=base.CONFIDENCE,
+        image_size=base.YOLO_IMAGE_SIZE,
+        target_names=base.TARGET_CLASS_NAMES,
+    )
     display = frame.copy()
     boundary = cv2.convexHull(
         calibration["image_points"].astype(np.int32).reshape(-1, 1, 2)
@@ -212,11 +213,8 @@ def detect_frame(
     cv2.polylines(display, [boundary], True, (255, 255, 0), 2)
     detections: list[Detection] = []
 
-    for box in result.boxes:
-        class_id = int(box.cls[0].item())
-        if base.normalize_name(model.names[class_id]) not in base.TARGET_CLASS_NAMES:
-            continue
-        xyxy = box.xyxy[0].tolist()
+    for box in pumpkin_boxes:
+        xyxy = box.xyxy
         x1, y1, x2, y2 = hsv_filter.clamp_box(
             xyxy, frame.shape[1], frame.shape[0]
         )
@@ -266,7 +264,7 @@ def detect_frame(
                 label=label,
                 orange_ratio=float(colour["orange_ratio"]),
                 green_ratio=float(colour["green_ratio"]),
-                confidence=float(box.conf[0].item()),
+                confidence=box.confidence,
                 image_margin_px=float(margin_px),
                 commanded_offset_deg=float(commanded_offset_deg),
                 measured_offset_deg=float(measured_offset_deg),

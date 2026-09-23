@@ -21,6 +21,7 @@ from omx_f import OmxFollower
 from . import pumpkin_detected_approach_validation as base
 from . import pumpkin_multiangle_approach_validation as multi
 from vision_pkg.pumpkin_detection import color_classifier as hsv_filter
+from vision_pkg.pumpkin_detection import yolo_detector
 
 
 APPROACH_CLEARANCES_M = (0.080, 0.030, 0.010, 0.000)
@@ -61,25 +62,20 @@ def choose_orange_pumpkin(model: YOLO, cap, calibration):
                 f"필요한 크기는 {base.CAMERA_WIDTH}x{base.CAMERA_HEIGHT}입니다."
             )
 
-        result = model.predict(
-            source=frame,
-            conf=base.CONFIDENCE,
-            imgsz=base.YOLO_IMAGE_SIZE,
-            device="cpu",
-            verbose=False,
-        )[0]
+        _, pumpkin_boxes = yolo_detector.detect_pumpkin_boxes(
+            model,
+            frame,
+            confidence=base.CONFIDENCE,
+            image_size=base.YOLO_IMAGE_SIZE,
+            target_names=base.TARGET_CLASS_NAMES,
+        )
         annotated = frame.copy()
         cv2.polylines(annotated, [boundary], True, (255, 255, 0), 2)
         orange_candidates = []
         counts = {"ORANGE": 0, "GREEN": 0, "UNKNOWN": 0}
 
-        for box in result.boxes:
-            class_id = int(box.cls[0].item())
-            class_name = base.normalize_name(model.names[class_id])
-            if class_name not in base.TARGET_CLASS_NAMES:
-                continue
-
-            xyxy = box.xyxy[0].tolist()
+        for box in pumpkin_boxes:
+            xyxy = box.xyxy
             x1, y1, x2, y2 = hsv_filter.clamp_box(
                 xyxy, frame.shape[1], frame.shape[0]
             )
@@ -114,7 +110,7 @@ def choose_orange_pumpkin(model: YOLO, cap, calibration):
                     {
                         "u": u,
                         "v": v,
-                        "confidence": float(box.conf[0].item()),
+                        "confidence": box.confidence,
                         "margin_px": margin_px,
                     }
                 )
