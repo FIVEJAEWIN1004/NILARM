@@ -20,7 +20,7 @@ from ultralytics import YOLO
 from omx_f import OmxFollower
 from . import pumpkin_detected_approach_validation as base
 from . import pumpkin_multiangle_approach_validation as multi
-from . import pumpkin_orange_hsv_filter as hsv_filter
+from vision_pkg.pumpkin_detection import color_classifier as hsv_filter
 
 
 APPROACH_CLEARANCES_M = (0.080, 0.030, 0.010, 0.000)

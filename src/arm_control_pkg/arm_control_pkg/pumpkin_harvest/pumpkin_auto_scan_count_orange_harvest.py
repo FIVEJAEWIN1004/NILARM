@@ -23,7 +23,7 @@ from omx_f import OmxFollower
 import omx_f.robot as omx_robot
 from . import pumpkin_detected_approach_validation as base
 from . import pumpkin_multiangle_approach_validation as multi
-from . import pumpkin_orange_hsv_filter as hsv_filter
+from vision_pkg.pumpkin_detection import color_classifier as hsv_filter
 from . import pumpkin_orange_auto_grasp_validation as grasp
 
 
