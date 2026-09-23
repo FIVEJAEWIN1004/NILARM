@@ -24,6 +24,7 @@ import omx_f.robot as omx_robot
 from . import pumpkin_detected_approach_validation as base
 from . import pumpkin_multiangle_approach_validation as multi
 from vision_pkg.pumpkin_detection import color_classifier as hsv_filter
+from vision_pkg.pumpkin_detection import spatial_tracking
 from vision_pkg.pumpkin_detection import yolo_detector
 from . import pumpkin_orange_auto_grasp_validation as grasp
 
@@ -152,14 +153,12 @@ def normalized_gripper_value(arm) -> float:
 
 
 def add_view_detection(tracks: list[ViewTrack], detection: Detection) -> None:
-    nearest = None
-    nearest_distance = float("inf")
-    for track in tracks:
-        distance = math.hypot(track.x - detection.xy[0], track.y - detection.xy[1])
-        if distance < nearest_distance:
-            nearest = track
-            nearest_distance = distance
-    if nearest is not None and nearest_distance <= VIEW_MATCH_DISTANCE_M:
+    nearest = spatial_tracking.nearest_within(
+        tracks,
+        detection.xy,
+        VIEW_MATCH_DISTANCE_M,
+    )
+    if nearest is not None:
         nearest.add(detection)
     else:
         tracks.append(
@@ -172,14 +171,12 @@ def add_view_detection(tracks: list[ViewTrack], detection: Detection) -> None:
 
 
 def add_global_track(clusters: list[PumpkinCluster], track: ViewTrack) -> None:
-    nearest = None
-    nearest_distance = float("inf")
-    for cluster in clusters:
-        distance = math.hypot(cluster.x - track.x, cluster.y - track.y)
-        if distance < nearest_distance:
-            nearest = cluster
-            nearest_distance = distance
-    if nearest is not None and nearest_distance <= DUPLICATE_DISTANCE_M:
+    nearest = spatial_tracking.nearest_within(
+        clusters,
+        (track.x, track.y),
+        DUPLICATE_DISTANCE_M,
+    )
+    if nearest is not None:
         nearest.add_view(track)
     else:
         clusters.append(

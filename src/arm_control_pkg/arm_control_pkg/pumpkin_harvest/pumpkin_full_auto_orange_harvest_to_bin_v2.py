@@ -13,11 +13,12 @@ from __future__ import annotations
 
 from collections import Counter
 import json
-import math
 from pathlib import Path
 import time
 
 import numpy as np
+
+from vision_pkg.pumpkin_detection import spatial_tracking
 
 from . import pumpkin_auto_scan_count_orange_harvest as scan
 
@@ -112,16 +113,13 @@ def add_global_track_one_to_one(
 ) -> None:
     """Merge across views, never two pumpkins detected in the same view."""
     angle = track_view_angle(track)
-    candidates = []
-    for cluster in clusters:
-        if cluster_has_view_angle(cluster, angle):
-            continue
-        distance = math.hypot(cluster.x - track.x, cluster.y - track.y)
-        if distance <= scan.DUPLICATE_DISTANCE_M:
-            candidates.append((distance, cluster))
-
-    if candidates:
-        _distance, nearest = min(candidates, key=lambda item: item[0])
+    nearest = spatial_tracking.nearest_within(
+        clusters,
+        (track.x, track.y),
+        scan.DUPLICATE_DISTANCE_M,
+        eligible=lambda cluster: not cluster_has_view_angle(cluster, angle),
+    )
+    if nearest is not None:
         nearest.add_view(track)
         return
 
