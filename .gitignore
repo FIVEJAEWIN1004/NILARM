@@ -4,3 +4,10 @@ log/
 .vscode/
 __pycache__/
 *.pyc
+
+# ROS2/colcon generated files
+/build/
+/install/
+/log/
+# Python generated files
+*.py[cod]

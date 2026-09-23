@@ -1,4 +1,0 @@
-[console_scripts]
-camera_drive_controller = vision_pkg.straight_nav_controller:main
-rpicam_publisher = vision_pkg.rpicam_publisher:main
-vision_node = vision_pkg.vision_node:main
