@@ -1,1 +1,0 @@
-/home/fivejaewin/NILARM/build/interfaces_pkg/rosidl_typesupport_introspection_c/interfaces_pkg/msg/detail/mission_state__rosidl_typesupport_introspection_c.h
