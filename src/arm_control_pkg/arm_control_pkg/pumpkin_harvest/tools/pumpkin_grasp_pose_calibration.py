@@ -20,10 +20,10 @@ import numpy as np
 from omx_f import OmxFollower
 
 
-PLANE_CALIBRATION_PATH = Path(__file__).with_name(
+PLANE_CALIBRATION_PATH = Path(__file__).resolve().parent.parent.joinpath(
     "pumpkin_plane_calibration.json"
 )
-OUTPUT_PATH = Path(__file__).with_name("pumpkin_grasp_pose_calibration.json")
+OUTPUT_PATH = Path(__file__).resolve().parent.parent.joinpath("pumpkin_grasp_pose_calibration.json")
 
 GRIPPER_OPEN_DURATION_SEC = 3.0
 APPROACH_CLEARANCE_M = 0.080

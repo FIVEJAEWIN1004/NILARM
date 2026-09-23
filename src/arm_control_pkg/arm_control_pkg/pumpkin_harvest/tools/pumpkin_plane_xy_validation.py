@@ -22,7 +22,7 @@ import numpy as np
 from omx_f import OmxFollower
 
 
-CALIBRATION_PATH = Path(__file__).with_name("pumpkin_plane_calibration.json")
+CALIBRATION_PATH = Path(__file__).resolve().parent.parent.joinpath("pumpkin_plane_calibration.json")
 
 # Verified arm camera.  Never fall back to /dev/video0 (laptop camera).
 CAMERA_DEVICE_PATH = Path("/dev/video2")

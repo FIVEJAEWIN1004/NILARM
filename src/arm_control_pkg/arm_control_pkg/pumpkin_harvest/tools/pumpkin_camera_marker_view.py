@@ -17,8 +17,8 @@ import numpy as np
 from ultralytics import YOLO
 
 from omx_f import OmxFollower
-import pumpkin_detected_approach_validation as base
-import pumpkin_multiangle_approach_validation as multi
+from .. import pumpkin_detected_approach_validation as base
+from .. import pumpkin_multiangle_approach_validation as multi
 
 
 WINDOW_NAME = "Pumpkin HSV check - ORANGE harvest / Q quit / S save"
@@ -278,7 +278,7 @@ def main() -> None:
                 break
             if key in (ord("s"), ord("S")) and last_display is not None:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                output_path = Path(__file__).with_name(
+                output_path = Path(__file__).resolve().parent.parent.joinpath(
                     f"pumpkin_hsv_check_{timestamp}.png"
                 )
                 if cv2.imwrite(str(output_path), last_display):

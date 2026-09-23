@@ -30,8 +30,8 @@ CAMERA_INDEX_FALLBACK = 2
 CAMERA_WIDTH = 640
 CAMERA_HEIGHT = 480
 
-CAMERA_POSE_PATH = Path(__file__).with_name("camera_view_pose.json")
-OUTPUT_PATH = Path(__file__).with_name("pumpkin_plane_calibration.json")
+CAMERA_POSE_PATH = Path(__file__).resolve().parent.parent.joinpath("camera_view_pose.json")
+OUTPUT_PATH = Path(__file__).resolve().parent.parent.joinpath("pumpkin_plane_calibration.json")
 
 CAMERA_MOVE_DURATION_SEC = 6.0
 SETTLE_TIME_SEC = 1.0

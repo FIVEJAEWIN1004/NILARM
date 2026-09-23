@@ -19,8 +19,8 @@ import numpy as np
 from ultralytics import YOLO
 
 from omx_f import OmxFollower
-import pumpkin_detected_approach_validation as base
-import pumpkin_multiangle_approach_validation as multi
+from .. import pumpkin_detected_approach_validation as base
+from .. import pumpkin_multiangle_approach_validation as multi
 
 
 DEFAULT_STEP_M = 0.005
