@@ -283,6 +283,7 @@ def choose_pumpkin(model: YOLO, cap, calibration) -> tuple[float, float] | None:
         ok, frame = cap.read()
         if not ok or frame is None:
             raise RuntimeError("팔 카메라 프레임을 읽지 못했습니다.")
+        cv2.imwrite("green_test.jpg", frame)
         if frame.shape[:2] != (CAMERA_HEIGHT, CAMERA_WIDTH):
             raise RuntimeError(
                 f"영상 크기가 {frame.shape[1]}x{frame.shape[0]}입니다. "
