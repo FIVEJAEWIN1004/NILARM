@@ -13,7 +13,7 @@ source "$HOME/venv/omx/bin/activate"
 
 export NILARM_REPOSITORY_ROOT="$NILARM_ROOT"
 export AMENT_PREFIX_PATH="$NILARM_ROOT/install/arm_control_pkg:${AMENT_PREFIX_PATH:-}"
-export PYTHONPATH="$NILARM_ROOT/src/arm_control_pkg:${PYTHONPATH:-}"
+export PYTHONPATH="$NILARM_ROOT/build/arm_control_pkg:$NILARM_ROOT/src/arm_control_pkg:${PYTHONPATH:-}"
 
 echo "NILARM 수확 환경 적용 완료"
 echo "  저장소: $NILARM_ROOT"
