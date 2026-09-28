@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# START: verify the whole system, then arm the drive (/camera_drive/enable).
-# `nilarm` runs this automatically; run it by hand to retry/debug.
+# START: make sure the laptop /harvest server runs, verify the whole system,
+# then arm the drive (/camera_drive/enable). `nilarm` runs this automatically;
+# run it by hand to retry/debug.
 # Never enables unless ALL of these hold (else the robot stays stopped):
+#   laptop server ensured over SSH (skip: NILARM_REMOTE_HARVEST=0),
 #   exactly 1 /camera_straight_drive, /camera_drive/enable service,
-#   /camera/image/compressed + /odom publishers, /harvest server (laptop).
+#   /camera/image/compressed + /odom publishers, exactly 1 /harvest server.
 here="$(dirname "$(readlink -f "$0")")"
+repo="$(cd "${here}/../../.." && pwd)"
 source "${NILARM_ENV_SCRIPT:-${here}/nilarm_env.sh}" || exit 1
 ready_timeout="${NILARM_READY_TIMEOUT:-60}"
 
@@ -27,10 +30,19 @@ system_ready() {
     (( $(count_of 'Publisher count' topic info /camera/image/compressed) >= 1 )) \
         || not_ready+=" no:camera_publisher"
     (( $(count_of 'Publisher count' topic info /odom) >= 1 )) || not_ready+=" no:/odom"
-    (( $(count_of 'Action servers' action info /harvest) >= 1 )) \
-        || not_ready+=" no:/harvest_server(laptop)"
+    local harvest
+    harvest="$(count_of 'Action servers' action info /harvest)"
+    [[ "${harvest}" == "1" ]] || not_ready+=" harvest_servers=${harvest}(need 1)"
     [[ -z "${not_ready}" ]]
 }
+
+if [[ "${NILARM_REMOTE_HARVEST:-1}" == "1" ]]; then
+    if ! "${repo}/scripts/start_remote_harvest.sh"; then
+        echo "NOT STARTED: laptop /harvest server could not be ensured (see above)." >&2
+        echo "Robot stays stopped. Fix it, then run: nilarm-start" >&2
+        exit 1
+    fi
+fi
 
 echo "nilarm-start: checking system (timeout ${ready_timeout}s, ROS_DOMAIN_ID=${ROS_DOMAIN_ID})"
 deadline=$((SECONDS + ready_timeout))

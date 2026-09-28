@@ -15,3 +15,6 @@ __pycache__/
 # Pinky robot build (scripts/setup_pinky.sh)
 /.pinky_ws/
 .pytest_cache/
+# Pinky -> laptop harvest (scripts/setup_remote_harvest.sh): local only
+/.nilarm_remote_env
+/.nilarm_logs/

@@ -52,8 +52,9 @@ fi
 
 cat <<'USAGE'
 
-Ready. Every match (laptop /harvest server running first):
-  nilarm          # starts everything, checks drive/camera/odom/harvest, then STARTs
+Ready. One time for the laptop link: ./scripts/setup_remote_harvest.sh <user>@<laptop_ip>
+Every match:
+  nilarm          # starts Pinky + laptop /harvest server, checks everything, then STARTs
 If a check fails the robot stays stopped; fix it and run `nilarm-start`.
 Do not run the laptop camera_straight_drive (exactly one drive node allowed).
 USAGE
