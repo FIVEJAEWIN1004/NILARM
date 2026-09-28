@@ -31,12 +31,6 @@ setup(
             "pumpkin_harvest = "
             "arm_control_pkg.pumpkin_harvest."
             "pumpkin_full_auto_orange_harvest_to_bin_v5:main",
-            "fake_harvest_server = "
-            "arm_control_pkg.pumpkin_harvest."
-            "fake_harvest_action_server:main",
-            "harvest_action_server = "
-            "arm_control_pkg.pumpkin_harvest."
-            "harvest_action_server:main",
         ],
     },
 )

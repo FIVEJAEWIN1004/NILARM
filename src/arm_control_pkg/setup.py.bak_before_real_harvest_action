@@ -34,9 +34,6 @@ setup(
             "fake_harvest_server = "
             "arm_control_pkg.pumpkin_harvest."
             "fake_harvest_action_server:main",
-            "harvest_action_server = "
-            "arm_control_pkg.pumpkin_harvest."
-            "harvest_action_server:main",
         ],
     },
 )

@@ -28,8 +28,12 @@ MODEL_PATH = Path(
     "/home/chaeyoung/KSAM/NILARM/src/vision_pkg/models/nil_pumpkin.pt"
 )
 CALIBRATION_PATH = Path(__file__).with_name("pumpkin_plane_calibration.json")
+# Written by pumpkin_xy_residual_calibration.py. This used to point at a
+# differently-named/-shaped file ("pumpkin_grasp_xy_calibration.json",
+# expecting an "affine_detected_to_actual_xy" key) that nothing ever wrote,
+# so the residual correction samples were collected but silently unused.
 GRASP_XY_CALIBRATION_PATH = Path(__file__).with_name(
-    "pumpkin_grasp_xy_calibration.json"
+    "pumpkin_grasp_xy_correction.json"
 )
 
 CONFIDENCE = 0.70
@@ -110,12 +114,23 @@ def load_calibration():
         grasp_xy_data = json.loads(
             GRASP_XY_CALIBRATION_PATH.read_text(encoding="utf-8")
         )
-        grasp_xy_affine = checked_array(
-            grasp_xy_data["affine_detected_to_actual_xy"],
-            (2, 3),
-            "affine_detected_to_actual_xy",
-        )
-        print(f"그리퍼 XY 보정을 적용합니다: {GRASP_XY_CALIBRATION_PATH}")
+        correction = grasp_xy_data.get("correction", {})
+        if correction.get("type") == "affine":
+            matrix = checked_array(correction["matrix"], (2, 2), "correction.matrix")
+            bias = checked_array(correction["bias_m"], (2,), "correction.bias_m")
+            grasp_xy_affine = np.c_[matrix, bias]
+            print(f"그리퍼 XY 보정(affine)을 적용합니다: {GRASP_XY_CALIBRATION_PATH}")
+        elif correction.get("type") == "translation":
+            grasp_xy_affine = np.asarray(
+                [[1.0, 0.0, correction["dx_m"]], [0.0, 1.0, correction["dy_m"]]],
+                dtype=float,
+            )
+            print(f"그리퍼 XY 보정(translation)을 적용합니다: {GRASP_XY_CALIBRATION_PATH}")
+        else:
+            print(
+                f"{GRASP_XY_CALIBRATION_PATH}에 유효한 correction이 없어 "
+                "기존 평면 보정만 사용합니다."
+            )
     else:
         print("그리퍼 XY 보정 파일이 없어 기존 평면 보정만 사용합니다.")
 
@@ -246,8 +261,13 @@ def detect_frame(model, frame, calibration, offset_deg):
 
         confidence = float(box.conf[0].item())
         x1, y1, x2, y2 = [float(x) for x in box.xyxy[0].tolist()]
+        # No depth camera: the ground-plane homography is only valid at
+        # z=0. The box centre sits at the pumpkin's mid-height, which
+        # reprojects onto the floor plane with a parallax offset that grows
+        # with view angle. The box bottom is the pumpkin's floor contact
+        # point, which actually lies on the calibrated plane.
         u = (x1 + x2) / 2.0
-        v = (y1 + y2) / 2.0
+        v = y2
 
         if not inside_polygon((u, v), calibration["image_points"]):
             continue
