@@ -285,6 +285,10 @@ class CameraStraightDrive(Node):
             Twist, str(self.get_parameter('cmd_vel_topic').value), 10)
         self.state_pub = self.create_publisher(
             String, '/camera_drive/state', 10)
+        self.display_mode_pub = self.create_publisher(
+            String, '/pinky/display_mode', 10)
+        self.music_pub = self.create_publisher(
+            String, '/pinky/music_control', 10)
         self.create_subscription(
             CompressedImage,
             str(self.get_parameter('camera_topic').value),
@@ -1543,6 +1547,7 @@ class CameraStraightDrive(Node):
         self.curve_yaw_error = self._normalize_angle(
             self.curve_target_yaw - self.current_yaw)
         self.state = DriveState.STATION_TO_NEXT_STOP
+        self._publish_media(self.display_mode_pub, 'IMAGE')
         self.get_logger().warning(
             'STATION departure started: saved actual STATION odom pose; '
             f'target=({self.curve_target_x:.3f}, '
@@ -1698,6 +1703,7 @@ class CameraStraightDrive(Node):
         self.steering_command = 0.0
         self.state = DriveState.FINAL_REACHED
         self._publish_stop(repeat=5)
+        self._publish_media(self.music_pub, 'STOP')
         self.get_logger().warning(
             f'FINAL_REACHED: camera={self.final_camera_distance:.3f}m, '
             f'straight={self.final_straight_distance:.3f}m; STOPPING')
@@ -2278,9 +2284,19 @@ class CameraStraightDrive(Node):
             f'CAMERA_DRIVING armed from odom ({self.start_x:.3f}, '
             f'{self.start_y:.3f})')
         self.get_logger().warning(response.message)
+        self._publish_media(self.display_mode_pub, 'IMAGE')
+        self._publish_media(self.music_pub, 'START')
         return response
 
+    def _publish_media(self, publisher, text):
+        # LCD/music are cosmetic: never let them affect driving.
+        try:
+            publisher.publish(String(data=text))
+        except Exception as error:
+            self.get_logger().warning(f'media publish {text} failed: {error}')
+
     def _disable(self):
+        self._publish_media(self.music_pub, 'STOP')
         self.enabled = False
         self.sequence_active = False
         self.command_active = False
@@ -2489,6 +2505,8 @@ class CameraStraightDrive(Node):
             self.station_input_thread.join(timeout=1.0)
         if hasattr(self, 'cmd_pub') and rclpy.ok():
             self._publish_stop(repeat=5)
+        if hasattr(self, 'music_pub') and rclpy.ok():
+            self._publish_media(self.music_pub, 'STOP')
         return super().destroy_node()
 
 

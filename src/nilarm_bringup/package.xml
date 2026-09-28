@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>nilarm_bringup</name>
+  <version>0.0.1</version>
+  <description>NILARM competition launch for the Pinky robot (drive, camera, LED/LCD)</description>
+  <maintainer email="pinky@example.com">pinky</maintainer>
+  <license>Apache-2.0</license>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>pinky_camera_drive</exec_depend>
+  <exec_depend>pinky_media</exec_depend>
+  <!-- Robot underlays (not in this repo): ~/pinky_pro, ~/camera_ws -->
+  <exec_depend>pinky_bringup</exec_depend>
+  <exec_depend>camera_pkg</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -50,6 +50,7 @@ class HarvestRunResult:
 
     harvested_count: int
     detected_ripe_count: int
+    attempted_count: int = 0
     cancelled: bool = False
 
 
@@ -491,6 +492,7 @@ def main(
     current_scan_offset = 0.0
     successes = 0
     detected_ripe_count = 0
+    attempted_count = 0
 
     try:
         raise_if_cancelled(cancel_callback)
@@ -571,7 +573,11 @@ def main(
         if not ripe_clusters:
             print("수확 가능한 주황 호박이 없습니다.")
             emit_feedback(feedback_callback, successes, "failed")
-            return HarvestRunResult(successes, detected_ripe_count)
+            return HarvestRunResult(
+                successes,
+                detected_ripe_count,
+                attempted_count,
+            )
         ripe_clusters.sort(key=lambda c: math.hypot(c.x, c.y))
         print(f"{AUTO_COUNTDOWN_SEC}초 후 주황 호박 자동 집기를 시작합니다.")
         for remaining in range(AUTO_COUNTDOWN_SEC, 0, -1):
@@ -588,6 +594,7 @@ def main(
             harvest_index = successes + 1
             emit_feedback(feedback_callback, successes, "grasping")
             safe_to_park = False
+            attempted_count += 1
             harvested = harvest_one(
                 arm,
                 calibration,
@@ -607,13 +614,21 @@ def main(
             f"\n자동 집기 검증 완료: 주황 {len(ripe_clusters)}개 중 "
             f"{successes}개 성공"
         )
-        completed = target_count is None or successes >= target_count
+        completed = (
+            successes == detected_ripe_count
+            if target_count is None
+            else successes >= target_count
+        )
         emit_feedback(
             feedback_callback,
             successes,
             "completed" if completed else "failed",
         )
-        return HarvestRunResult(successes, detected_ripe_count)
+        return HarvestRunResult(
+            successes,
+            detected_ripe_count,
+            attempted_count,
+        )
 
     except ScanCancelled:
         print("사용자가 자동 스캔을 취소했습니다. 수확하지 않습니다.")
@@ -625,14 +640,22 @@ def main(
             safe_to_park = True
         emit_feedback(feedback_callback, successes, "cancelled")
         return HarvestRunResult(
-            successes, detected_ripe_count, cancelled=True)
+            successes,
+            detected_ripe_count,
+            attempted_count,
+            cancelled=True,
+        )
     except KeyboardInterrupt:
         safe_to_park = False
         print("\n사용자가 중단했습니다. 자동 추가 이동을 생략합니다.")
         print("로봇과 호박을 직접 받치고 상태를 확인하세요.")
         emit_feedback(feedback_callback, successes, "cancelled")
         return HarvestRunResult(
-            successes, detected_ripe_count, cancelled=True)
+            successes,
+            detected_ripe_count,
+            attempted_count,
+            cancelled=True,
+        )
     except Exception as error:
         emit_feedback(feedback_callback, successes, "failed")
         raise HarvestExecutionError(str(error), successes) from error

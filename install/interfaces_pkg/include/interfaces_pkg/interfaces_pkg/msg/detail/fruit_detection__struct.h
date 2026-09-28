@@ -1,1 +1,0 @@
-/home/fivejaewin/NILARM/build/interfaces_pkg/rosidl_generator_c/interfaces_pkg/msg/detail/fruit_detection__struct.h

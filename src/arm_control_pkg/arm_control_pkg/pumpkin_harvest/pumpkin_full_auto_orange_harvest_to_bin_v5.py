@@ -10,6 +10,7 @@ harvest.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 
 import numpy as np
 
@@ -32,6 +33,7 @@ def zone_for_cluster(cluster: scan.PumpkinCluster) -> str:
 def print_competition_summary(
     clusters: list[scan.PumpkinCluster],
     require_confirmation: bool = True,
+    display_result_callback: Callable[[str], None] | None = None,
 ) -> list[scan.PumpkinCluster]:
     """Print maturity totals and the required A-N / B-N ripe-fruit line."""
     ripe = v2._ORIGINAL_PRINT_SUMMARY(clusters)
@@ -47,9 +49,16 @@ def print_competition_summary(
         print(f"Unknown Pumpkin - {maturity_counts['UNKNOWN']}")
     print("===================================")
 
+    display_result = f"A-{a_ripe} / B-{b_ripe}"
     print("\n========== 제7회 본선 출력 ==========")
-    print(f"A-{a_ripe} / B-{b_ripe}")
+    print(display_result)
     print("======================================")
+
+    if display_result_callback is not None:
+        try:
+            display_result_callback(display_result)
+        except Exception as error:
+            print(f"[경고] LCD 결과 publish 실패(수확은 계속): {error}")
 
     if ripe and require_confirmation:
         input(
@@ -65,6 +74,7 @@ def run_harvest(
     require_harvest_confirmation: bool = False,
     feedback_callback: scan.FeedbackCallback | None = None,
     cancel_callback: scan.CancelCallback | None = None,
+    display_result_callback: Callable[[str], None] | None = None,
 ) -> scan.HarvestRunResult:
     """Run the verified v5 flow with optional ROS-facing controls."""
     global _SPEED_CONFIGURED
@@ -105,6 +115,7 @@ def run_harvest(
     scan.print_summary = lambda clusters: print_competition_summary(
         clusters,
         require_confirmation=require_harvest_confirmation,
+        display_result_callback=display_result_callback,
     )
     scan.harvest_one = v2.harvest_one_direct
     scan.AUTO_COUNTDOWN_SEC = 0

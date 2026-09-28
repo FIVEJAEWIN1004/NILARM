@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# START: verify the whole system, then arm the drive (/camera_drive/enable).
+# `nilarm` runs this automatically; run it by hand to retry/debug.
+# Never enables unless ALL of these hold (else the robot stays stopped):
+#   exactly 1 /camera_straight_drive, /camera_drive/enable service,
+#   /camera/image/compressed + /odom publishers, /harvest server (laptop).
+here="$(dirname "$(readlink -f "$0")")"
+source "${NILARM_ENV_SCRIPT:-${here}/nilarm_env.sh}" || exit 1
+ready_timeout="${NILARM_READY_TIMEOUT:-60}"
+
+# When started by `nilarm`, give up as soon as the launch is gone.
+launch_alive() { [[ -z "${NILARM_LAUNCH_PID}" ]] || kill -0 "${NILARM_LAUNCH_PID}" 2>/dev/null; }
+
+count_of() {  # $1 = field label, rest = ros2 args; prints the number or 0
+    local label="$1"; shift
+    timeout 10 ros2 "$@" 2>/dev/null | awk -v l="${label}:" '$0 ~ "^"l {print $NF; exit}' | grep -E '^[0-9]+$' || echo 0
+}
+
+not_ready=""
+system_ready() {
+    local drives
+    drives="$(timeout 10 ros2 node list 2>/dev/null | grep -cx '/camera_straight_drive')"
+    not_ready=""
+    [[ "${drives}" == "1" ]] || not_ready+=" drive_nodes=${drives}(need 1)"
+    timeout 10 ros2 service list 2>/dev/null | grep -qx '/camera_drive/enable' \
+        || not_ready+=" no:/camera_drive/enable"
+    (( $(count_of 'Publisher count' topic info /camera/image/compressed) >= 1 )) \
+        || not_ready+=" no:camera_publisher"
+    (( $(count_of 'Publisher count' topic info /odom) >= 1 )) || not_ready+=" no:/odom"
+    (( $(count_of 'Action servers' action info /harvest) >= 1 )) \
+        || not_ready+=" no:/harvest_server(laptop)"
+    [[ -z "${not_ready}" ]]
+}
+
+echo "nilarm-start: checking system (timeout ${ready_timeout}s, ROS_DOMAIN_ID=${ROS_DOMAIN_ID})"
+deadline=$((SECONDS + ready_timeout))
+until system_ready; do
+    launch_alive || exit 1
+    if (( SECONDS >= deadline )); then
+        echo "NOT STARTED: not ready after ${ready_timeout}s:${not_ready}" >&2
+        echo "Robot stays stopped. Fix the above, then run: nilarm-start" >&2
+        exit 1
+    fi
+    echo "  waiting:${not_ready}"
+    sleep 2
+done
+echo "nilarm-start: all ready. Arming when the yellow boundary is seen..."
+
+last_notice=${SECONDS}
+while launch_alive; do
+    response="$(timeout 5 ros2 service call /camera_drive/enable \
+        std_srvs/srv/SetBool "{data: true}" 2>&1 || true)"
+    if grep -q 'success=True' <<<"${response}"; then
+        echo "STARTED: $(grep -o "message='[^']*'" <<<"${response}")"
+        echo "Emergency stop: Ctrl+C in the nilarm terminal."
+        exit 0
+    fi
+    if (( SECONDS - last_notice >= 5 )); then
+        echo "  not armed yet: $(grep -o "message='[^']*'" <<<"${response}" || echo 'no response')"
+        last_notice=${SECONDS}
+    fi
+    sleep 0.5
+done
+exit 1

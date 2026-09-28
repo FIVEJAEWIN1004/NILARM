@@ -11,3 +11,7 @@ __pycache__/
 /log/
 # Python generated files
 *.py[cod]
+
+# Pinky robot build (scripts/setup_pinky.sh)
+/.pinky_ws/
+.pytest_cache/

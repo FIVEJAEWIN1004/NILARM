@@ -9,6 +9,24 @@ from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import String
+
+
+def _is_harvest_success(
+    harvest_all_detected: bool,
+    target_count: int,
+    detected_ripe_count: int,
+    attempted_count: int,
+    harvested_count: int,
+) -> bool:
+    if harvest_all_detected:
+        return (
+            detected_ripe_count > 0
+            and attempted_count == detected_ripe_count
+            and harvested_count == detected_ripe_count
+        )
+    return harvested_count >= target_count
 
 
 class HarvestActionServer(Node):
@@ -16,8 +34,19 @@ class HarvestActionServer(Node):
 
     def __init__(self):
         super().__init__('harvest_action_server')
+        self.declare_parameter('harvest_all_detected', False)
         self._goal_lock = threading.Lock()
         self._goal_active = False
+        display_qos = QoSProfile(
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        self._display_result_publisher = self.create_publisher(
+            String,
+            '/harvest/display_result',
+            display_qos,
+        )
         self._action_server = ActionServer(
             self,
             Harvest,
@@ -52,6 +81,9 @@ class HarvestActionServer(Node):
 
     def _execute_callback(self, goal_handle):
         target_count = int(goal_handle.request.target_count)
+        harvest_all_detected = bool(
+            self.get_parameter('harvest_all_detected').value)
+        run_target_count = None if harvest_all_detected else target_count
         harvested_count = 0
         result = Harvest.Result()
 
@@ -64,21 +96,38 @@ class HarvestActionServer(Node):
                 f'Harvest feedback: current_count={current_count}, '
                 f'status={status}')
 
+        def publish_display_result(display_result: str) -> None:
+            try:
+                message = String()
+                message.data = display_result
+                self._display_result_publisher.publish(message)
+                self.get_logger().info(
+                    f'Harvest display result published: {display_result}')
+            except Exception as error:
+                self.get_logger().error(
+                    'Harvest display result publish failed; '
+                    f'harvest will continue: {error}')
+
         try:
             # Deliberately deferred: importing the OMX/YOLO harvest stack and
             # calling run_harvest happen only after this accepted goal executes.
             from .pumpkin_full_auto_orange_harvest_to_bin_v5 import run_harvest
 
             self.get_logger().warning(
-                f'Harvest execution started: target_count={target_count}')
+                'Harvest execution started: '
+                f'target_count={target_count}, '
+                f'harvest_all_detected={harvest_all_detected}')
             run_result = run_harvest(
-                target_count=target_count,
+                target_count=run_target_count,
                 require_start_confirmation=False,
                 require_harvest_confirmation=False,
                 feedback_callback=publish_feedback,
                 cancel_callback=lambda: goal_handle.is_cancel_requested,
+                display_result_callback=publish_display_result,
             )
             harvested_count = int(run_result.harvested_count)
+            detected_ripe_count = int(run_result.detected_ripe_count)
+            attempted_count = int(run_result.attempted_count)
 
             if run_result.cancelled or goal_handle.is_cancel_requested:
                 goal_handle.canceled()
@@ -89,19 +138,30 @@ class HarvestActionServer(Node):
                     f'harvested_count={harvested_count}')
                 return result
 
-            result.success = harvested_count >= target_count
+            result.success = _is_harvest_success(
+                harvest_all_detected,
+                target_count,
+                detected_ripe_count,
+                attempted_count,
+                harvested_count,
+            )
             result.harvested_count = harvested_count
             if result.success:
                 goal_handle.succeed()
                 self.get_logger().info(
                     'Harvest succeeded: '
+                    f'detected_ripe_count={detected_ripe_count}, '
+                    f'attempted_count={attempted_count}, '
                     f'harvested_count={harvested_count}')
             else:
                 publish_feedback(harvested_count, 'failed')
                 goal_handle.abort()
                 self.get_logger().error(
-                    'Harvest target not met: '
+                    'Harvest completion condition not met: '
+                    f'harvest_all_detected={harvest_all_detected}, '
                     f'target_count={target_count}, '
+                    f'detected_ripe_count={detected_ripe_count}, '
+                    f'attempted_count={attempted_count}, '
                     f'harvested_count={harvested_count}')
             return result
         except Exception as error:

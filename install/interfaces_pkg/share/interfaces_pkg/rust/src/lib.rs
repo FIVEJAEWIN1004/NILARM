@@ -1,1 +1,0 @@
-/home/fivejaewin/NILARM/build/interfaces_pkg/rosidl_generator_rs/interfaces_pkg/rust/src/lib.rs

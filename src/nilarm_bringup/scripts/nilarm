@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# The one match command: start everything Pinky runs, then START automatically
+# once nilarm-start has verified drive/camera/odom/laptop /harvest server.
+# If any check fails the robot stays stopped (DISABLED).
+# Ctrl+C = stop everything (drive publishes zero Twist).
+# NILARM_AUTO_START=0 nilarm  -> launch only; START later with nilarm-start.
+here="$(dirname "$(readlink -f "$0")")"
+source "${here}/nilarm_env.sh" || exit 1
+if [[ ! -f "${NILARM_WS}/install/setup.bash" ]]; then
+    echo "nilarm: not built yet; run ${NILARM_REPO}/scripts/setup_pinky.sh" >&2
+    exit 1
+fi
+if [[ "${NILARM_AUTO_START:-1}" == "1" ]]; then
+    # Sidecar; exits by itself when the launch (this PID after exec) is gone.
+    NILARM_LAUNCH_PID=$$ "${here}/nilarm-start" &
+fi
+exec ros2 launch nilarm_bringup competition.launch.py "$@"
