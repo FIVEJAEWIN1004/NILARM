@@ -30,15 +30,12 @@ from vision_pkg.pumpkin_detection import yolo_detector
 PLANE_PATH = Path(__file__).with_name("pumpkin_plane_calibration.json")
 GRASP_PATH = Path(__file__).with_name("pumpkin_grasp_pose_calibration.json")
 
+from .arm_camera import CAMERA_HEIGHT, CAMERA_WIDTH, find_arm_camera
 from .runtime_paths import vision_model_candidates
 
 MODEL_CANDIDATES = vision_model_candidates()
 
-# Verified arm camera. Never fall back to the laptop camera at /dev/video0.
-CAMERA_DEVICE_PATH = Path("/dev/video2")
-CAMERA_EXPECTED_NAME = "Innomaker"
-CAMERA_WIDTH = 640
-CAMERA_HEIGHT = 480
+# Arm camera is found by name in arm_camera.py; never a laptop camera.
 
 CONFIDENCE = 0.70
 YOLO_IMAGE_SIZE = 416
@@ -169,23 +166,14 @@ def validate_model(model: YOLO) -> None:
 
 
 def verified_camera_source() -> str:
-    if not CAMERA_DEVICE_PATH.exists():
-        raise RuntimeError(f"팔 카메라 장치가 없습니다: {CAMERA_DEVICE_PATH}")
-    name_path = Path(f"/sys/class/video4linux/{CAMERA_DEVICE_PATH.name}/name")
-    if not name_path.is_file():
-        raise RuntimeError(f"카메라 이름을 확인할 수 없습니다: {name_path}")
-    device_name = name_path.read_text(encoding="utf-8").strip()
-    if CAMERA_EXPECTED_NAME.lower() not in device_name.lower():
-        raise RuntimeError(
-            f"{CAMERA_DEVICE_PATH}는 팔 카메라가 아닙니다: {device_name}\n"
-            "노트북 카메라로는 실행하지 않습니다."
-        )
-    print(f"팔 카메라 확인: {CAMERA_DEVICE_PATH} ({device_name})")
-    return str(CAMERA_DEVICE_PATH)
+    device, device_name = find_arm_camera()
+    print(f"Selected OMX arm camera: {device} ({device_name})")
+    return device
 
 
 def open_camera() -> cv2.VideoCapture:
-    cap = cv2.VideoCapture(verified_camera_source(), cv2.CAP_V4L2)
+    source = verified_camera_source()
+    cap = cv2.VideoCapture(source, cv2.CAP_V4L2)
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"YUYV"))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
@@ -193,7 +181,7 @@ def open_camera() -> cv2.VideoCapture:
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
         cap.release()
-        raise RuntimeError(f"팔 카메라를 열 수 없습니다: {CAMERA_DEVICE_PATH}")
+        raise RuntimeError(f"팔 카메라를 열 수 없습니다: {source}")
 
     fourcc_value = int(cap.get(cv2.CAP_PROP_FOURCC))
     applied_fourcc = "".join(
