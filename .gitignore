@@ -17,4 +17,6 @@ __pycache__/
 .pytest_cache/
 # Pinky -> laptop harvest (scripts/setup_remote_harvest.sh): local only
 /.nilarm_remote_env
+# Laptop -> Pinky HSV deploy target (ksam_hsv_calibrate): local only
+/.nilarm_pinky_env
 /.nilarm_logs/

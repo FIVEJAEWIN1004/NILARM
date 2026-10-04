@@ -112,6 +112,15 @@ camera_straight_drive:
     yellow_s_high: 190
     yellow_v_low: 80
     yellow_v_high: 220
+    # Runtime-only S/V widening around the yellow_* calibration (H never
+    # changes, YAML is never rewritten). false = exact legacy thresholds.
+    hsv_adaptive_enabled: true
+    hsv_adaptive_ema_alpha: 0.05
+    hsv_adaptive_v_max_offset: 35
+    hsv_adaptive_s_max_offset: 20
+    # 0.0 = use the scene brightness of the first frames after start-up.
+    hsv_adaptive_reference_v: 0.0
+    hsv_adaptive_roi_y_ratio: 0.65
     min_boundary_area: 180.0
     min_boundary_height_ratio: 0.25
     min_line_points: 25

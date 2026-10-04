@@ -11,12 +11,16 @@ import rclpy
 from geometry_msgs.msg import Twist
 from interfaces_pkg.action import Harvest
 from nav_msgs.msg import Odometry
+from pinky_camera_drive import hsv_utils
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.signals import SignalHandlerOptions
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import String
 from std_srvs.srv import SetBool
+
+
+AUTO_REFERENCE_FRAMES = 15
 
 
 class DriveState:
@@ -174,6 +178,15 @@ class CameraStraightDrive(Node):
         self.declare_parameter('odom_timeout_sec', 0.5)
         self.declare_parameter('control_rate_hz', 20.0)
         self.declare_parameter('frame_log_interval_sec', 5.0)
+        # Runtime-only S/V widening around the YAML calibration (H fixed).
+        # Off by default: the node behaves exactly as before.
+        self.declare_parameter('hsv_adaptive_enabled', False)
+        self.declare_parameter('hsv_adaptive_ema_alpha', 0.05)
+        self.declare_parameter('hsv_adaptive_v_max_offset', 35)
+        self.declare_parameter('hsv_adaptive_s_max_offset', 20)
+        # <= 0: latch the scene brightness of the first frames after start.
+        self.declare_parameter('hsv_adaptive_reference_v', 0.0)
+        self.declare_parameter('hsv_adaptive_roi_y_ratio', 0.65)
 
         self._load_parameters()
         self._validate_parameters()
@@ -280,6 +293,9 @@ class CameraStraightDrive(Node):
         self.steering_command = 0.0
         self.frame_count = 0
         self.last_frame_log_time = self.get_clock().now()
+        self.hsv_brightness_ema = None
+        self.hsv_reference_frames = 0
+        self.hsv_auto_reference = None
 
         self.cmd_pub = self.create_publisher(
             Twist, str(self.get_parameter('cmd_vel_topic').value), 10)
@@ -525,6 +541,18 @@ class CameraStraightDrive(Node):
             self.get_parameter('odom_timeout_sec').value)
         self.control_rate = float(
             self.get_parameter('control_rate_hz').value)
+        self.hsv_adaptive_enabled = bool(
+            self.get_parameter('hsv_adaptive_enabled').value)
+        self.hsv_adaptive_ema_alpha = float(
+            self.get_parameter('hsv_adaptive_ema_alpha').value)
+        self.hsv_adaptive_v_max_offset = int(
+            self.get_parameter('hsv_adaptive_v_max_offset').value)
+        self.hsv_adaptive_s_max_offset = int(
+            self.get_parameter('hsv_adaptive_s_max_offset').value)
+        self.hsv_adaptive_reference_v = float(
+            self.get_parameter('hsv_adaptive_reference_v').value)
+        self.hsv_adaptive_roi_y_ratio = float(
+            self.get_parameter('hsv_adaptive_roi_y_ratio').value)
 
     def _validate_parameters(self):
         if not 0.0 < self.max_linear_speed <= 0.08:
@@ -702,6 +730,17 @@ class CameraStraightDrive(Node):
         ]
         if not all(0 <= value <= 255 for value in hsv_values):
             raise ValueError('HSV parameters must be within [0, 255]')
+        if self.hsv_adaptive_enabled:
+            if not 0.0 < self.hsv_adaptive_ema_alpha <= 1.0:
+                raise ValueError('hsv_adaptive_ema_alpha must be in (0, 1]')
+            if not 0 <= self.hsv_adaptive_v_max_offset <= 40:
+                raise ValueError('hsv_adaptive_v_max_offset must be in [0, 40]')
+            if not 0 <= self.hsv_adaptive_s_max_offset <= 20:
+                raise ValueError('hsv_adaptive_s_max_offset must be in [0, 20]')
+            if not 0.0 <= self.hsv_adaptive_roi_y_ratio < 1.0:
+                raise ValueError('hsv_adaptive_roi_y_ratio must be in [0, 1)')
+            if self.hsv_adaptive_reference_v > 255.0:
+                raise ValueError('hsv_adaptive_reference_v must be <= 255')
 
     def _image_callback(self, msg: CompressedImage):
         encoded = np.frombuffer(msg.data, dtype=np.uint8)
@@ -738,6 +777,8 @@ class CameraStraightDrive(Node):
             int(self.get_parameter('yellow_s_high').value),
             int(self.get_parameter('yellow_v_high').value),
         ], dtype=np.uint8)
+        if self.hsv_adaptive_enabled:
+            lower, upper = self._adapt_yellow_sv(frame, lower, upper)
         mask = cv2.inRange(hsv, lower, upper)
         kernel = np.ones((5, 5), dtype=np.uint8)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
@@ -817,6 +858,35 @@ class CameraStraightDrive(Node):
         self.target_x = int(round(self.target_x_config))
         self.path_error = int(round(error))
         self.steering_command = angular
+
+    def _adapt_yellow_sv(self, frame, lower, upper):
+        """Bounded, in-memory S/V widening from smoothed scene brightness."""
+        brightness = hsv_utils.scene_brightness(
+            frame, self.hsv_adaptive_roi_y_ratio)
+        self.hsv_brightness_ema = hsv_utils.ema_update(
+            self.hsv_brightness_ema, brightness, self.hsv_adaptive_ema_alpha)
+        reference = self.hsv_adaptive_reference_v
+        if reference <= 0.0:
+            if self.hsv_auto_reference is None:
+                self.hsv_reference_frames += 1
+                if self.hsv_reference_frames < AUTO_REFERENCE_FRAMES:
+                    return lower, upper
+                self.hsv_auto_reference = self.hsv_brightness_ema
+                self.get_logger().info(
+                    'adaptive HSV: reference brightness latched at '
+                    f'V={self.hsv_auto_reference:.1f}')
+            reference = self.hsv_auto_reference
+        offsets = hsv_utils.adaptive_sv_offsets(
+            self.hsv_brightness_ema, reference,
+            self.hsv_adaptive_s_max_offset, self.hsv_adaptive_v_max_offset)
+        lower, upper = hsv_utils.apply_sv_offsets(lower, upper, *offsets)
+        self.get_logger().info(
+            f'adaptive HSV: scene_V={self.hsv_brightness_ema:.1f} '
+            f'ref={reference:.1f} S_low{offsets[0]:+d} V_low{offsets[1]:+d} '
+            f'V_high{offsets[2]:+d} -> S {lower[1]}-{upper[1]} '
+            f'V {lower[2]}-{upper[2]} (H {lower[0]}-{upper[0]} fixed)',
+            throttle_duration_sec=5.0)
+        return lower, upper
 
     def _clear_detection(self):
         self.path_detected = False

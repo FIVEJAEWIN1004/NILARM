@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# LAPTOP: field HSV calibration of the yellow boundary. Only subscribes to the
+# Pinky camera; never publishes, never moves the robot.
+#   one time:  ~/NILARM/scripts/ksam_hsv_calibrate --install   # ~/.local/bin link
+#   each time: ksam_hsv_calibrate [--patch 11] [--topic T] [--config PATH]
+# Needs the Pinky publishing /camera/image/compressed on the same ROS_DOMAIN_ID
+# (default 99). Edits src/pinky_camera_drive/config/camera_straight_drive.yaml
+# (six yellow_* keys only, timestamped backup) on ENTER.
+# Then copies ONLY that YAML to Pinky (backup + verify there); --no-deploy skips.
+# Pinky target: $NILARM_PINKY_HOST > <repo>/.nilarm_pinky_env > built-in default.
+repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+
+if [[ "$1" == "--install" ]]; then
+    mkdir -p "$HOME/.local/bin"
+    ln -sfn "${repo}/scripts/ksam_hsv_calibrate" "$HOME/.local/bin/ksam_hsv_calibrate"
+    echo "Installed: ~/.local/bin/ksam_hsv_calibrate -> ${repo}/scripts/ksam_hsv_calibrate"
+    case ":$PATH:" in
+        *":$HOME/.local/bin:"*) ;;
+        *) echo "~/.local/bin is not on PATH in this shell; open a new terminal." ;;
+    esac
+    exit 0
+fi
+
+# System python: ROS Jazzy is built for it (an active OMX venv must not win).
+py=/usr/bin/python3
+if ! "${py}" -c 'import rclpy, sensor_msgs' 2>/dev/null; then
+    if [[ ! -f /opt/ros/jazzy/setup.bash ]]; then
+        echo "ksam_hsv_calibrate: ROS 2 Jazzy not found (/opt/ros/jazzy)" >&2
+        exit 1
+    fi
+    source /opt/ros/jazzy/setup.bash
+fi
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-99}"
+# Run straight from the source tree; no colcon build needed on the laptop.
+export PYTHONPATH="${repo}/src/pinky_camera_drive${PYTHONPATH:+:${PYTHONPATH}}"
+exec "${py}" -u -m pinky_camera_drive.hsv_calibrator \
+    --config "${repo}/src/pinky_camera_drive/config/camera_straight_drive.yaml" "$@"
