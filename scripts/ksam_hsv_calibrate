@@ -8,6 +8,8 @@
 # (six yellow_* keys only, timestamped backup) on ENTER.
 # Then copies ONLY that YAML to Pinky (backup + verify there); --no-deploy skips.
 # Pinky target: $NILARM_PINKY_HOST > <repo>/.nilarm_pinky_env > built-in default.
+# On Pinky, `ksam_hsv_calibrate` is scripts/start_remote_hsv_calibrate.sh, which
+# runs THIS script on the laptop over SSH (no DISPLAY -> laptop desktop is used).
 repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 
 if [[ "$1" == "--install" ]]; then
@@ -22,7 +24,33 @@ if [[ "$1" == "--install" ]]; then
 fi
 
 # System python: ROS Jazzy is built for it (an active OMX venv must not win).
-py=/usr/bin/python3
+py="${NILARM_HSV_PYTHON:-/usr/bin/python3}"
+
+# One calibrator at a time: two would race on the same YAML.
+if pids="$(pgrep -f -- '-m pinky_camera_drive\.hsv_calibrator')"; then
+    echo "HSV calibration NOT started: a calibrator is already running on the laptop (pid ${pids//$'\n'/ })" >&2
+    exit 11
+fi
+
+use_desktop_display() {
+    # Same as run_harvest_server.sh: an SSH session (ksam_hsv_calibrate on
+    # Pinky) has no DISPLAY, so attach to the logged-in laptop desktop.
+    local sock auth
+    sock="$(ls "${NILARM_X11_DIR:-/tmp/.X11-unix}"/ 2>/dev/null | head -1)"
+    auth="$(ls "/run/user/$(id -u)"/.mutter-Xwaylandauth.* 2>/dev/null | head -1)"
+    [[ -z "${auth}" && -f "$HOME/.Xauthority" ]] && auth="$HOME/.Xauthority"
+    [[ -n "${sock}" && -n "${auth}" ]] || return 1
+    export DISPLAY=":${sock#X}" XAUTHORITY="${auth}"
+}
+if [[ -z "${DISPLAY}" ]]; then
+    if ! use_desktop_display || ! "${py}" -c 'import cv2
+cv2.namedWindow("ksam_hsv_probe"); cv2.waitKey(1); cv2.destroyAllWindows()' 2>/dev/null; then
+        echo "HSV calibration NOT started: laptop desktop DISPLAY unavailable" >&2
+        exit 10
+    fi
+    echo "ksam_hsv_calibrate: window opens on the laptop desktop (DISPLAY=${DISPLAY})"
+fi
+
 if ! "${py}" -c 'import rclpy, sensor_msgs' 2>/dev/null; then
     if [[ ! -f /opt/ros/jazzy/setup.bash ]]; then
         echo "ksam_hsv_calibrate: ROS 2 Jazzy not found (/opt/ros/jazzy)" >&2

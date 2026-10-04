@@ -43,7 +43,9 @@ if [[ "$1" != "--no-command" ]]; then
     mkdir -p "$HOME/.local/bin"
     ln -sfn "${scripts}/nilarm" "$HOME/.local/bin/nilarm"
     ln -sfn "${scripts}/nilarm-start" "$HOME/.local/bin/nilarm-start"
-    echo "Installed: ~/.local/bin/nilarm, ~/.local/bin/nilarm-start"
+    # Opens the HSV calibrator on the laptop screen (calibrator runs there).
+    ln -sfn "${repo}/scripts/start_remote_hsv_calibrate.sh" "$HOME/.local/bin/ksam_hsv_calibrate"
+    echo "Installed: ~/.local/bin/nilarm, ~/.local/bin/nilarm-start, ~/.local/bin/ksam_hsv_calibrate"
     case ":$PATH:" in
         *":$HOME/.local/bin:"*) ;;
         *) echo "~/.local/bin is not on PATH in this shell; open a new login shell (ssh again)." ;;
