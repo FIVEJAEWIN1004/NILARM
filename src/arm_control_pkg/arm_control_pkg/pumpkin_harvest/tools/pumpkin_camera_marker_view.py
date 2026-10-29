@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Preview YOLO pumpkin detections with HSV orange/green classification.
+"""Move the OMX arm to a scan pose and preview classified detections.
 
-The arm moves only to one selected folded scan pose. Every detected pumpkin is
-labelled ORANGE, GREEN, or UNKNOWN from the inner body region of its YOLO box.
-This program never approaches a pumpkin and never operates the gripper.
+WARNING: this program connects to and moves the real OMX arm, then parks it on
+exit.  It never approaches a pumpkin or operates the gripper, but it is not a
+camera-only checker.  Use pumpkin_camera_only_view for motion-free validation.
 """
 
 from __future__ import annotations
@@ -220,6 +220,8 @@ def main() -> None:
     last_display = None
 
     try:
+        print("경고: 이 도구는 실제 OMX 로봇팔을 움직이고 종료 시 park합니다.")
+        print("카메라 전용 확인은 pumpkin_camera_only_view를 사용하세요.")
         calibration = base.load_calibrations()
         model_path = base.find_model_path()
         print(f"YOLO 모델: {model_path}")

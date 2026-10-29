@@ -29,6 +29,8 @@ BIN_HOVER_DURATION_SEC = 8.0
 BIN_DROP_DURATION_SEC = 3.0
 BIN_FOLD_DURATION_SEC = 8.0
 BIN_SETTLE_SEC = 0.7
+HELD_TRANSPORT_SPEED_MULTIPLIER = 2.0
+PUMPKIN_PREPOSITION_SPEED_MULTIPLIER = 2.0
 
 _BIN_HOVER_JOINTS: np.ndarray | None = None
 _BIN_DROP_JOINTS: np.ndarray | None = None
@@ -36,8 +38,26 @@ _BIN_FOLDED_JOINTS: np.ndarray | None = None
 _ORIGINAL_PRINT_SUMMARY = scan.print_summary
 
 
+def held_transport_duration(current_duration_sec: float) -> float:
+    """Run only grasped-pumpkin lift/fold/transport at twice current speed."""
+    duration = float(current_duration_sec)
+    if duration <= 0.0:
+        raise ValueError("운반 이동 시간은 0보다 커야 합니다.")
+    return duration / HELD_TRANSPORT_SPEED_MULTIPLIER
+
+
+def pumpkin_preposition_duration(current_duration_sec: float) -> float:
+    """Double only folded target alignment and high free-space approach."""
+    duration = float(current_duration_sec)
+    if duration <= 0.0:
+        raise ValueError("수확 준비 이동 시간은 0보다 커야 합니다.")
+    return duration / PUMPKIN_PREPOSITION_SPEED_MULTIPLIER
+
+
 def require_full_auto_start() -> None:
-    print("\n이 프로그램은 각도 입력 없이 전 범위를 자동 스캔합니다.")
+    angles = ", ".join(f"{angle:+d}" for angle in scan.SCAN_OFFSETS_DEG)
+    print("\n이 프로그램은 각도 입력 없이 대회용 선택 각도를 자동 스캔합니다.")
+    print(f"자동 스캔 각도: {angles}도")
     print("전체 호박을 중복 제거해 집계한 뒤 주황 호박만 자동 수확합니다.")
     print("초록·UNKNOWN 호박에는 접근하지 않습니다.")
     print("사람·케이블을 치우고 적재함을 티칭·검증한 위치에 고정하세요.")
@@ -105,6 +125,46 @@ def cluster_has_view_angle(cluster: scan.PumpkinCluster, angle: int) -> bool:
         int(round(observation.commanded_offset_deg)) == angle
         for observation in cluster.observations
     )
+
+
+# Positive Z is upward.  These competition-only residuals adjust the complete
+# approach stack and final grasp height for the selected observation angle.
+ANGLE_GRASP_Z_OFFSET_M = {
+    -140: -0.025,  # 25 mm farther down (raised 5 mm)
+    70: 0.005,    # 5 mm less down
+    130: -0.018,  # 18 mm farther down (raised 2 mm)
+}
+
+
+def apply_angle_grasp_z_offset(target: dict, commanded_offset_deg: float) -> dict:
+    """Return a copied target with the verified per-angle grasp-Z residual."""
+    angle = int(round(float(commanded_offset_deg)))
+    z_offset = ANGLE_GRASP_Z_OFFSET_M.get(angle, 0.0)
+    result = dict(target)
+    result["angle_grasp_z_offset_m"] = z_offset
+    result["planned_grasp_z"] = float(target["planned_grasp_z"]) + z_offset
+    result["xyz_stages"] = [
+        np.asarray(stage, dtype=float).copy() for stage in target["xyz_stages"]
+    ]
+    for stage in result["xyz_stages"]:
+        stage[2] += z_offset
+    return result
+
+
+def select_grasp_z_correction_angle(
+    cluster: scan.PumpkinCluster,
+    selected_angle: int,
+) -> int:
+    """Use a unique calibrated view even when another view supplies XY."""
+    observed_angles = {
+        int(round(item.commanded_offset_deg)) for item in cluster.observations
+    }
+    calibrated_observations = observed_angles.intersection(
+        ANGLE_GRASP_Z_OFFSET_M
+    )
+    if len(calibrated_observations) == 1:
+        return calibrated_observations.pop()
+    return selected_angle
 
 
 def add_global_track_one_to_one(
@@ -180,11 +240,16 @@ def move_held_pumpkin_to_bin(
         print(f"[운반 준비] 집기점 +{clearance_mm:.0f} mm로 상승합니다.")
         arm.move_joints(
             joints_stages[index],
-            duration=scan.grasp.LIFT_STEP_DURATION_SEC,
+            duration=held_transport_duration(
+                scan.grasp.LIFT_STEP_DURATION_SEC
+            ),
         )
 
     print("[운반 준비] 과실 방향에서 팔을 접습니다.")
-    arm.move_joints(prealign_joints, duration=scan.grasp.RETURN_DURATION_SEC)
+    arm.move_joints(
+        prealign_joints,
+        duration=held_transport_duration(scan.grasp.RETURN_DURATION_SEC),
+    )
 
     rotation_deg = float(
         np.degrees(_BIN_FOLDED_JOINTS[0] - prealign_joints[0])
@@ -192,7 +257,9 @@ def move_held_pumpkin_to_bin(
     print("[운반] 중앙 기본 각도를 거치지 않고 접힌 상태로 적재함 방향에 이동합니다.")
     arm.move_joints(
         _BIN_FOLDED_JOINTS,
-        duration=scan.multi.movement_duration(rotation_deg),
+        duration=held_transport_duration(
+            scan.multi.movement_duration(rotation_deg)
+        ),
     )
 
 
@@ -275,7 +342,19 @@ def harvest_one_direct(
     if observation is None:
         return False
 
+    observed_angles = sorted(
+        {int(round(item.commanded_offset_deg)) for item in cluster.observations}
+    )
+    selected_angle = int(round(observation.commanded_offset_deg))
+    z_correction_angle = select_grasp_z_correction_angle(
+        cluster,
+        selected_angle,
+    )
     target = scan.make_original_height_target(observation.target)
+    target = apply_angle_grasp_z_offset(
+        target,
+        z_correction_angle,
+    )
     current_joints = np.asarray(arm.joints(), dtype=float)
     try:
         prealign, prealign_delta, joints_stages, _deltas = (
@@ -297,15 +376,25 @@ def harvest_one_direct(
         f"{target['world_target_xy'][1]:+.4f}) m / "
         f"집기 z={target['planned_grasp_z']:+.4f} m"
     )
+    z_offset_mm = target["angle_grasp_z_offset_m"] * 1000.0
+    print(
+        f"[각도별 높이 보정] 관측각={observed_angles}, "
+        f"XY 선택각={selected_angle:+d}도, "
+        f"높이 보정각={z_correction_angle:+d}도, Z={z_offset_mm:+.1f} mm"
+    )
     print("집기 전 그리퍼를 최대로 열지 않고 기본 폭을 유지합니다.")
 
     arm.move_joints(
         prealign,
-        duration=scan.multi.movement_duration(prealign_delta),
+        duration=pumpkin_preposition_duration(
+            scan.multi.movement_duration(prealign_delta)
+        ),
     )
     arm.move_joints(
         joints_stages[0],
-        duration=scan.grasp.HIGH_MOVE_DURATION_SEC,
+        duration=pumpkin_preposition_duration(
+            scan.grasp.HIGH_MOVE_DURATION_SEC
+        ),
     )
     for index in (1, 2, 3):
         arm.move_joints(

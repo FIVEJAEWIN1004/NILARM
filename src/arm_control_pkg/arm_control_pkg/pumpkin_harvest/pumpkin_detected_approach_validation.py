@@ -23,14 +23,19 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-from omx_f import OmxFollower
 from vision_pkg.pumpkin_detection import yolo_detector
 
 
 PLANE_PATH = Path(__file__).with_name("pumpkin_plane_calibration.json")
 GRASP_PATH = Path(__file__).with_name("pumpkin_grasp_pose_calibration.json")
 
-from .arm_camera import CAMERA_HEIGHT, CAMERA_WIDTH, find_arm_camera
+from .arm_camera import (
+    CAMERA_FOURCC,
+    CAMERA_FPS,
+    CAMERA_HEIGHT,
+    CAMERA_WIDTH,
+    find_arm_camera,
+)
 from .runtime_paths import vision_model_candidates
 
 MODEL_CANDIDATES = vision_model_candidates()
@@ -174,10 +179,10 @@ def verified_camera_source() -> str:
 def open_camera() -> cv2.VideoCapture:
     source = verified_camera_source()
     cap = cv2.VideoCapture(source, cv2.CAP_V4L2)
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"YUYV"))
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*CAMERA_FOURCC))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
-    cap.set(cv2.CAP_PROP_FPS, 30)
+    cap.set(cv2.CAP_PROP_FPS, CAMERA_FPS)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
         cap.release()
@@ -195,6 +200,12 @@ def open_camera() -> cv2.VideoCapture:
         f"FOURCC={applied_fourcc}, "
         f"{applied_width}x{applied_height}, FPS={applied_fps:.1f}"
     )
+    if applied_fourcc != CAMERA_FOURCC:
+        cap.release()
+        raise RuntimeError(
+            f"팔 카메라 영상 형식이 {applied_fourcc!r}입니다. "
+            f"필요한 형식은 {CAMERA_FOURCC}입니다."
+        )
 
     warmup_frame = None
     for _ in range(30):
@@ -398,6 +409,10 @@ def plan_fixed_pose_stages(arm, xyz_stages, current_joints, pitch_rad, roll_rad)
 
 
 def main() -> None:
+    # Keep OMX out of import-only camera/vision tools.  Hardware control is
+    # loaded only when this arm-motion entry point is explicitly executed.
+    from omx_f import OmxFollower
+
     arm = None
     cap = None
     calibration = None

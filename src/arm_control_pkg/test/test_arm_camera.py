@@ -20,11 +20,12 @@ GOOD = """ioctl: VIDIOC_ENUM_FMT
 \t\t\tInterval: Discrete 0.033s (30.000 fps)
 """
 METADATA_NODE = "ioctl: VIDIOC_ENUM_FMT\n\tType: Video Capture\n"
-MJPG_ONLY_640 = GOOD.replace("'YUYV'", "'NV12'")
-YUYV_640_SLOW = GOOD.replace(
+NO_MJPG_640 = GOOD.replace("'MJPG'", "'NV12'")
+MJPG_640_SLOW = GOOD.replace(
     "Discrete 640x480\n\t\t\tInterval: Discrete 0.033s (30.000 fps)\n",
     "Discrete 640x480\n\t\t\tInterval: Discrete 0.100s (10.000 fps)\n",
-).replace("'MJPG'", "'XXXX'")
+    1,
+)
 
 
 def make_sysfs(tmp_path, names):
@@ -56,7 +57,7 @@ def test_follows_renumbering_and_skips_non_capture_node(tmp_path):
 
 
 @pytest.mark.parametrize("innomaker_formats", [
-    METADATA_NODE, MJPG_ONLY_640, YUYV_640_SLOW])
+    METADATA_NODE, NO_MJPG_640, MJPG_640_SLOW])
 def test_no_fallback_when_innomaker_mode_missing(tmp_path, innomaker_formats):
     names = {"video0": INNOMAKER, "video2": LAPTOP}
     formats = {"/dev/video0": innomaker_formats, "/dev/video2": GOOD}

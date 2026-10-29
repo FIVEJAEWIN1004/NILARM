@@ -16,9 +16,7 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-from omx_f import OmxFollower
 from . import pumpkin_detected_approach_validation as base
-from . import pumpkin_multiangle_approach_validation as multi
 
 
 WINDOW_NAME = "Pumpkin HSV check - ORANGE harvest / Q quit / S save"
@@ -220,6 +218,11 @@ def annotate_detections(model: YOLO, frame: np.ndarray, calibration):
 
 
 def main() -> None:
+    # Camera-only tools reuse the pure HSV helpers in this module.  Do not load
+    # OMX control code until this arm-moving entry point is explicitly run.
+    from omx_f import OmxFollower
+    from . import pumpkin_multiangle_approach_validation as multi
+
     arm = None
     cap = None
     calibration = None

@@ -26,9 +26,19 @@ from .. import pumpkin_multiangle_approach_validation as multi
 DEFAULT_STEP_M = 0.005
 SMALL_STEP_M = 0.002
 MAX_TOTAL_JOG_M = 0.030
+CALIBRATION_SPEED_MULTIPLIER = 2.0
+READY_DURATION_SEC = 5.0
 JOG_DURATION_SEC = 3.0
 MAX_JOG_SINGLE_JOINT_DEG = 12.0
 MAX_JOG_TOTAL_JOINT_DEG = 30.0
+
+
+def calibration_duration(normal_duration_sec):
+    """Return a tool-local duration without changing harvest timings."""
+    duration = float(normal_duration_sec)
+    if duration <= 0.0:
+        raise ValueError("이동 시간은 0보다 커야 합니다.")
+    return duration / CALIBRATION_SPEED_MULTIPLIER
 
 
 def joint_change(target, seed):
@@ -166,17 +176,25 @@ def retreat_to_central(
                 f"상승 관절 변화가 큽니다: max={max_delta:.1f}, total={total_delta:.1f}도"
             )
         print(f"현재 XY에서 {clearance * 1000:.0f}mm 상공으로 상승합니다.")
-        arm.move_joints(target, duration=multi.LOWER_MOVE_DURATION_SEC)
+        arm.move_joints(
+            target,
+            duration=calibration_duration(multi.LOWER_MOVE_DURATION_SEC),
+        )
         seed = target
     print("80mm 상공에서 수확방향 접힘 자세로 복귀합니다.")
-    arm.move_joints(prealign_joints, duration=multi.RETURN_DURATION_SEC)
+    arm.move_joints(
+        prealign_joints,
+        duration=calibration_duration(multi.RETURN_DURATION_SEC),
+    )
     joint1_delta_deg = np.degrees(
         prealign_joints[0] - calibration["camera_joints"][0]
     )
     print("팔을 접은 상태에서 중앙 안전 자세로 복귀합니다.")
     arm.move_joints(
         calibration["camera_joints"],
-        duration=multi.movement_duration(joint1_delta_deg),
+        duration=calibration_duration(
+            multi.movement_duration(joint1_delta_deg)
+        ),
     )
 
 
@@ -204,11 +222,15 @@ def main():
         print("그리퍼는 작동하지 않으며 30mm 상공까지만 접근합니다.")
         print("OMX 로봇팔에 연결합니다.")
         arm = OmxFollower().connect()
-        arm.ready(duration=5.0)
+        print("각도별 보정 이동 속도: 기존 대비 2.0배")
+        arm.ready(duration=calibration_duration(READY_DURATION_SEC))
 
         camera_joints = calibration["camera_joints"]
         base_joint1_deg = float(np.degrees(camera_joints[0]))
-        arm.move_joints(camera_joints, duration=base.CAMERA_MOVE_DURATION_SEC)
+        arm.move_joints(
+            camera_joints,
+            duration=calibration_duration(base.CAMERA_MOVE_DURATION_SEC),
+        )
         time.sleep(base.SETTLE_TIME_SEC)
         at_central_pose = True
 
@@ -225,7 +247,9 @@ def main():
         at_central_pose = False
         arm.move_joints(
             view_joints,
-            duration=multi.movement_duration(commanded_offset_deg),
+            duration=calibration_duration(
+                multi.movement_duration(commanded_offset_deg)
+            ),
         )
         time.sleep(base.SETTLE_TIME_SEC)
 
@@ -246,7 +270,9 @@ def main():
             print("목표 선택을 취소했습니다.")
             arm.move_joints(
                 camera_joints,
-                duration=multi.movement_duration(measured_offset_deg),
+                duration=calibration_duration(
+                    multi.movement_duration(measured_offset_deg)
+                ),
             )
             at_central_pose = True
             return
@@ -266,7 +292,9 @@ def main():
             print("중앙 카메라 자세로 복귀합니다.")
             arm.move_joints(
                 camera_joints,
-                duration=multi.movement_duration(measured_offset_deg),
+                duration=calibration_duration(
+                    multi.movement_duration(measured_offset_deg)
+                ),
             )
             at_central_pose = True
             return
@@ -301,7 +329,9 @@ def main():
             print("중앙 안전 자세로 복귀합니다.")
             arm.move_joints(
                 camera_joints,
-                duration=multi.movement_duration(measured_offset_deg),
+                duration=calibration_duration(
+                    multi.movement_duration(measured_offset_deg)
+                ),
             )
             at_central_pose = True
             return
@@ -324,7 +354,9 @@ def main():
             print("사전정렬하지 않고 중앙 자세로 복귀합니다.")
             arm.move_joints(
                 camera_joints,
-                duration=multi.movement_duration(measured_offset_deg),
+                duration=calibration_duration(
+                    multi.movement_duration(measured_offset_deg)
+                ),
             )
             at_central_pose = True
             return
@@ -332,7 +364,9 @@ def main():
         at_central_pose = False
         arm.move_joints(
             prealign_joints,
-            duration=multi.movement_duration(prealign_delta_deg),
+            duration=calibration_duration(
+                multi.movement_duration(prealign_delta_deg)
+            ),
         )
         print("수확방향 사전정렬 완료. 팔은 접힌 자세입니다.")
 
@@ -343,13 +377,18 @@ def main():
             print("80mm 상공으로 이동하지 않고 중앙 자세로 복귀합니다.")
             arm.move_joints(
                 camera_joints,
-                duration=multi.movement_duration(
-                    np.degrees(prealign_joints[0] - camera_joints[0])
+                duration=calibration_duration(
+                    multi.movement_duration(
+                        np.degrees(prealign_joints[0] - camera_joints[0])
+                    )
                 ),
             )
             at_central_pose = True
             return
-        arm.move_joints(joints_stages[0], duration=multi.HIGH_MOVE_DURATION_SEC)
+        arm.move_joints(
+            joints_stages[0],
+            duration=calibration_duration(multi.HIGH_MOVE_DURATION_SEC),
+        )
 
         confirmation = input(
             "정렬·주변이 안전하면 30mm 상공으로 바로 낮추려면 MOVE_30 입력: "
@@ -360,7 +399,10 @@ def main():
             )
             at_central_pose = True
             return
-        arm.move_joints(joints_stages[1], duration=multi.LOWER_MOVE_DURATION_SEC)
+        arm.move_joints(
+            joints_stages[1],
+            duration=calibration_duration(multi.LOWER_MOVE_DURATION_SEC),
+        )
         safe_for_automatic_return = True
         current_xy = baseline_world_xy.copy()
         current_joints = joints_stages[1].copy()
@@ -465,7 +507,10 @@ def main():
                 f"{candidate_xy[1]:.4f}) m"
             )
             safe_for_automatic_return = False
-            arm.move_joints(candidate_joints, duration=JOG_DURATION_SEC)
+            arm.move_joints(
+                candidate_joints,
+                duration=calibration_duration(JOG_DURATION_SEC),
+            )
             current_xy = candidate_xy
             current_joints = candidate_joints
             safe_for_automatic_return = True

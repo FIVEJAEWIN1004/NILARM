@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Automatically scan the full joint1 range, count pumpkins, and lift orange ones.
+"""Automatically scan selected joint1 views, count, and harvest orange pumpkins.
 
-The folded camera pose sweeps every calibrated offset from -140 to +140
-degrees. Detections are converted to fixed OMX-base XY coordinates and merged
-across frames and views. Only clusters classified ORANGE are grasped. Each
-orange pumpkin is lifted 30 mm, returned to its original location, and
-released; this program has no bin/drop-off motion.
+The folded camera pose sweeps the competition views that provide useful
+coverage. Detections are converted to fixed OMX-base XY coordinates and merged
+across frames and views. Only clusters classified ORANGE are grasped. Higher
+level v2/v4/v5 entry points replace the default harvest step with bin delivery.
 """
 
 from __future__ import annotations
@@ -30,9 +29,22 @@ from vision_pkg.pumpkin_detection import yolo_detector
 from . import pumpkin_orange_auto_grasp_validation as grasp
 
 
-SCAN_OFFSETS_DEG = tuple(multi.ALLOWED_OFFSETS_DEG)
+# Competition scan views.  Keep ALLOWED_OFFSETS_DEG unchanged so calibration
+# and manual validation can still address every previously measured angle.
+SCAN_OFFSETS_DEG = (-140, -110, -80, -50, 70, 100, 130)
+# v5/v4 replace this scan-only timing function without changing harvest
+# pre-alignment or folded transport rotation timing.
+scan_movement_duration = multi.movement_duration
+# v5/v4 replace this target-aware wrapper so only entry into the first -140
+# degree view can be accelerated independently from the remaining sweep.
+scan_target_movement_duration = (
+    lambda _commanded_deg, delta_deg: scan_movement_duration(delta_deg)
+)
 SCAN_FRAME_COUNT = 8
 SCAN_FLUSH_FRAMES = 4
+CAMERA_REOPEN_ATTEMPTS = 5
+CAMERA_REOPEN_DELAY_SEC = 1.0
+CAMERA_RECOVERIES_PER_ANGLE = 2
 MIN_VIEW_HITS = 3
 VIEW_MATCH_DISTANCE_M = 0.030
 DUPLICATE_DISTANCE_M = 0.050
@@ -318,13 +330,28 @@ def observe_angle(
     commanded_offset_deg,
     measured_offset_deg,
 ):
+    """Observe one angle, reopening a renumbered Innomaker camera if needed."""
     tracks: list[ViewTrack] = []
     for _ in range(SCAN_FLUSH_FRAMES):
         cap.read()
-    for frame_index in range(SCAN_FRAME_COUNT):
+    frame_index = 0
+    recovery_count = 0
+    while frame_index < SCAN_FRAME_COUNT:
         ok, frame = cap.read()
         if not ok or frame is None:
-            raise RuntimeError("팔 카메라 프레임을 읽지 못했습니다.")
+            if recovery_count >= CAMERA_RECOVERIES_PER_ANGLE:
+                raise RuntimeError(
+                    "팔 카메라가 반복 분리되어 프레임을 읽지 못했습니다."
+                )
+            recovery_count += 1
+            cap = reopen_arm_camera(cap, recovery_count)
+            # A reconnect starts a fresh observation window so hits from
+            # different device sessions are never mixed.
+            tracks.clear()
+            frame_index = 0
+            for _ in range(SCAN_FLUSH_FRAMES):
+                cap.read()
+            continue
         display, detections = detect_frame(
             model,
             frame,
@@ -360,7 +387,33 @@ def observe_angle(
         key = cv2.waitKey(1) & 0xFF
         if key in (ord("q"), ord("Q"), 27):
             raise ScanCancelled
-    return [track for track in tracks if track.hits >= MIN_VIEW_HITS]
+        frame_index += 1
+    return [track for track in tracks if track.hits >= MIN_VIEW_HITS], cap
+
+
+def reopen_arm_camera(cap, recovery_count: int):
+    """Release a dead node and rediscover the re-enumerated arm camera."""
+    cap.release()
+    last_error = None
+    for attempt in range(1, CAMERA_REOPEN_ATTEMPTS + 1):
+        print(
+            "[카메라 복구] USB 재연결 감지: "
+            f"새 Innomaker 장치 검색 {attempt}/{CAMERA_REOPEN_ATTEMPTS} "
+            f"(이번 각도 복구 {recovery_count}/{CAMERA_RECOVERIES_PER_ANGLE})"
+        )
+        try:
+            recovered = base.open_camera()
+        except RuntimeError as error:
+            last_error = error
+            if attempt < CAMERA_REOPEN_ATTEMPTS:
+                time.sleep(CAMERA_REOPEN_DELAY_SEC)
+            continue
+        print("[카메라 복구] 새 장치로 다시 열었습니다. 현재 각도를 재관측합니다.")
+        return recovered
+    raise RuntimeError(
+        "팔 카메라 USB 재연결 후 새 capture 장치를 열지 못했습니다: "
+        f"{last_error}"
+    ) from last_error
 
 
 def print_summary(clusters: list[PumpkinCluster]) -> list[PumpkinCluster]:
@@ -538,12 +591,15 @@ def main(
             delta = commanded - current_scan_offset
             print(f"\n[자동 스캔] offset {commanded:+d}도로 이동")
             safe_to_park = False
-            arm.move_joints(view_joints, duration=multi.movement_duration(delta))
+            arm.move_joints(
+                view_joints,
+                duration=scan_target_movement_duration(commanded, delta),
+            )
             current_scan_offset = float(commanded)
             time.sleep(base.SETTLE_TIME_SEC)
             measured = np.asarray(arm.joints(), dtype=float)
             measured_offset = float(np.degrees(measured[0])) - base_joint1_deg
-            tracks = observe_angle(
+            tracks, cap = observe_angle(
                 model,
                 cap,
                 calibration,
@@ -559,7 +615,7 @@ def main(
         print("\n전 범위 스캔 완료. 중앙 접힘 자세로 복귀합니다.")
         arm.move_joints(
             camera_joints,
-            duration=multi.movement_duration(current_scan_offset),
+            duration=scan_movement_duration(current_scan_offset),
         )
         current_scan_offset = 0.0
         safe_to_park = True
@@ -635,7 +691,7 @@ def main(
         if arm is not None and calibration is not None:
             arm.move_joints(
                 calibration["camera_joints"],
-                duration=multi.movement_duration(current_scan_offset),
+                duration=scan_movement_duration(current_scan_offset),
             )
             safe_to_park = True
         emit_feedback(feedback_callback, successes, "cancelled")

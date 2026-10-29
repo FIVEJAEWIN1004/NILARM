@@ -2,7 +2,7 @@
 
 /dev/videoN numbers change after reboot or USB reconnect, and one physical
 camera exposes several nodes (only one of them captures).  Each candidate
-node must advertise YUYV 640x480 @ 30 fps.  There is no fallback to any
+node must advertise MJPG 640x480 @ 30 fps.  There is no fallback to any
 other camera: if no Innomaker node qualifies, harvest must not start.
 """
 
@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 CAMERA_EXPECTED_NAME = "Innomaker-U20CAM-720P"
-CAMERA_FOURCC = "YUYV"
+CAMERA_FOURCC = "MJPG"
 CAMERA_WIDTH = 640
 CAMERA_HEIGHT = 480
 CAMERA_FPS = 30.0
