@@ -6,6 +6,8 @@
 #   laptop server ensured over SSH (skip: NILARM_REMOTE_HARVEST=0),
 #   exactly 1 /camera_straight_drive, /camera_drive/enable service,
 #   /camera/image/compressed + /odom publishers, exactly 1 /harvest server.
+# Once ready it also asks the laptop for an OMX pre-scan (/harvest/prescan),
+# so the arm scans while Pinky drives; that never gates the start.
 here="$(dirname "$(readlink -f "$0")")"
 repo="$(cd "${here}/../../.." && pwd)"
 source "${NILARM_ENV_SCRIPT:-${here}/nilarm_env.sh}" || exit 1
@@ -58,6 +60,24 @@ until system_ready; do
 done
 echo "nilarm-start: all ready. Arming when the yellow boundary is seen..."
 
+# Pre-scan: the laptop OMX scans while Pinky drives; it grasps nothing before
+# Pinky's /harvest goal at STATION. Best effort, in parallel with arming: if it
+# fails, /harvest simply scans at STATION as before. NILARM_PRESCAN=0 = off.
+prescan_pid=""
+if [[ "${NILARM_PRESCAN:-1}" == "1" ]]; then
+    (
+        reply="$(timeout 15 ros2 service call /harvest/prescan \
+            std_srvs/srv/Trigger "{}" 2>&1)"
+        detail="$(grep -o "message='[^']*'" <<<"${reply}" || echo 'no response')"
+        if grep -q 'success=True' <<<"${reply}"; then
+            echo "pre-scan: OMX scanning while Pinky drives (${detail})"
+        else
+            echo "pre-scan: not started, /harvest will scan at STATION (${detail})"
+        fi
+    ) &
+    prescan_pid=$!
+fi
+
 last_notice=${SECONDS}
 while launch_alive; do
     response="$(timeout 5 ros2 service call /camera_drive/enable \
@@ -65,6 +85,7 @@ while launch_alive; do
     if grep -q 'success=True' <<<"${response}"; then
         echo "STARTED: $(grep -o "message='[^']*'" <<<"${response}")"
         echo "Emergency stop: Ctrl+C in the nilarm terminal."
+        [[ -n "${prescan_pid}" ]] && wait "${prescan_pid}"
         exit 0
     fi
     if (( SECONDS - last_notice >= 5 )); then

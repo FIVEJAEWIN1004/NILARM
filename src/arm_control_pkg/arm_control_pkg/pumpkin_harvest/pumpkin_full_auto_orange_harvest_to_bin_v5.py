@@ -75,12 +75,21 @@ def run_harvest(
     feedback_callback: scan.FeedbackCallback | None = None,
     cancel_callback: scan.CancelCallback | None = None,
     display_result_callback: Callable[[str], None] | None = None,
+    require_departure_confirmation: bool = False,
+    before_harvest: Callable[[], bool] | None = None,
 ) -> scan.HarvestRunResult:
     """Run the verified v5 flow with optional ROS-facing controls."""
     global _SPEED_CONFIGURED
     if not _SPEED_CONFIGURED:
         v4.configure_selective_speed()
         _SPEED_CONFIGURED = True
+
+    # Set on every run: the server process reuses this module across goals.
+    v4.departure_signal_gate = (
+        v4.wait_for_manual_departure_signal
+        if require_departure_confirmation
+        else v4.continue_without_departure_signal
+    )
 
     # Use the newly re-taught collision-aware bin poses exactly as saved.
     v2.DROP_RAISE_M = 0.0
@@ -123,6 +132,7 @@ def run_harvest(
         target_count=target_count,
         feedback_callback=feedback_callback,
         cancel_callback=cancel_callback,
+        before_harvest=before_harvest,
     )
 
 

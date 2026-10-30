@@ -44,7 +44,7 @@ _ORIGINAL_MOVEMENT_DURATION = scan.multi.movement_duration
 
 
 def wait_for_manual_departure_signal() -> None:
-    """Temporary manual gate at the future mobile-departure signal point."""
+    """Debug-only manual gate; needs a terminal (stdin), never the server."""
     input(
         "\n[주행 출발 준비] 마지막 호박 적재와 그리퍼 상승이 완료됐습니다. "
         "주행 출발 신호 시점을 확인하려면 Enter: "
@@ -52,9 +52,17 @@ def wait_for_manual_departure_signal() -> None:
     print("[주행 출발 신호] Enter 확인 완료. 로봇팔 정리를 계속합니다.")
 
 
-# Replace this callable with ROS signaling when automatic Pinky departure is
-# enabled.  Keeping one hook makes the later change independent of arm motion.
-departure_signal_gate = wait_for_manual_departure_signal
+def continue_without_departure_signal() -> None:
+    """Competition default: no keyboard; the Action result signals Pinky."""
+    print(
+        "\n[주행 출발 준비] 마지막 호박 적재와 그리퍼 상승이 완료됐습니다. "
+        "자동으로 로봇팔 정리를 계속합니다."
+    )
+
+
+# Fully automatic by default. v5.run_harvest(require_departure_confirmation=
+# True) switches to the manual Enter gate for interactive debugging only.
+departure_signal_gate = continue_without_departure_signal
 
 
 def transit_rotation_duration(delta_deg: float) -> float:

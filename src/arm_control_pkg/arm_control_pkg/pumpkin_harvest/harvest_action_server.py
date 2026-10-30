@@ -11,6 +11,23 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import String
+from std_srvs.srv import Trigger
+
+from .prescan import PrescanCoordinator
+
+
+def _run_v5_harvest(**kwargs):
+    # Deliberately deferred: the OMX/YOLO harvest stack is imported only when
+    # an accepted goal or a pre-scan actually runs.
+    from .pumpkin_full_auto_orange_harvest_to_bin_v5 import run_harvest
+
+    return run_harvest(
+        require_start_confirmation=False,
+        require_harvest_confirmation=False,
+        # Server stdin is not a terminal: never wait for Enter.
+        require_departure_confirmation=False,
+        **kwargs,
+    )
 
 
 def _is_harvest_success(
@@ -35,6 +52,14 @@ class HarvestActionServer(Node):
     def __init__(self):
         super().__init__('harvest_action_server')
         self.declare_parameter('harvest_all_detected', False)
+        # An unclaimed pre-scan older than this is stale: never harvested.
+        self.declare_parameter('prescan_ready_timeout_sec', 180.0)
+        self._prescan = PrescanCoordinator(
+            _run_v5_harvest,
+            ready_timeout_sec=float(
+                self.get_parameter('prescan_ready_timeout_sec').value),
+            log=lambda text: self.get_logger().warning(text),
+        )
         self._goal_lock = threading.Lock()
         self._goal_active = False
         display_qos = QoSProfile(
@@ -56,8 +81,30 @@ class HarvestActionServer(Node):
             cancel_callback=self._cancel_callback,
             callback_group=ReentrantCallbackGroup(),
         )
+        # Pinky (nilarm-start) calls this as it departs: scan while it drives.
+        self.create_service(
+            Trigger, '/harvest/prescan', self._prescan_callback)
         self.get_logger().info(
             'Harvest Action Server READY - waiting for goal')
+
+    def _prescan_callback(self, _request, response):
+        if not bool(self.get_parameter('harvest_all_detected').value):
+            response.success = False
+            response.message = 'pre-scan needs harvest_all_detected:=true'
+        else:
+            with self._goal_lock:
+                goal_active = self._goal_active
+            if goal_active:
+                response.success = False
+                response.message = 'harvest goal active; pre-scan refused'
+            else:
+                response.success, response.message = (
+                    self._prescan.request_prescan())
+        if response.success:
+            self.get_logger().warning(f'Pre-scan request: {response.message}')
+        else:
+            self.get_logger().error(f'Pre-scan request: {response.message}')
+        return response
 
     def _goal_callback(self, goal_request):
         if goal_request.target_count <= 0:
@@ -109,18 +156,13 @@ class HarvestActionServer(Node):
                     f'harvest will continue: {error}')
 
         try:
-            # Deliberately deferred: importing the OMX/YOLO harvest stack and
-            # calling run_harvest happen only after this accepted goal executes.
-            from .pumpkin_full_auto_orange_harvest_to_bin_v5 import run_harvest
-
             self.get_logger().warning(
                 'Harvest execution started: '
                 f'target_count={target_count}, '
                 f'harvest_all_detected={harvest_all_detected}')
-            run_result = run_harvest(
+            # Uses a ready/running pre-scan, else the normal scan -> harvest.
+            run_result = self._prescan.harvest(
                 target_count=run_target_count,
-                require_start_confirmation=False,
-                require_harvest_confirmation=False,
                 feedback_callback=publish_feedback,
                 cancel_callback=lambda: goal_handle.is_cancel_requested,
                 display_result_callback=publish_display_result,
@@ -183,6 +225,7 @@ class HarvestActionServer(Node):
                 self._goal_active = False
 
     def destroy_node(self):
+        self._prescan.shutdown()
         self._action_server.destroy()
         return super().destroy_node()
 

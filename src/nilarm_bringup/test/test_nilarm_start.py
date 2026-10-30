@@ -29,7 +29,16 @@ case "$1 $2" in
       /odom) echo "Publisher count: $STUB_ODOM" ;;
     esac ;;
   "action info") printf 'Action: /harvest\nAction clients: 1\n    /x\nAction servers: %s\n' "$harvest" ;;
-  "service call") echo "response: std_srvs.srv.SetBool_Response(success=True, message='armed')" ;;
+  "service call")
+    if [[ "$3" == /harvest/prescan ]]; then
+      if [[ "${STUB_PRESCAN_OK:-1}" == 1 ]]; then
+        echo "response: std_srvs.srv.Trigger_Response(success=True, message='started')"
+      else
+        echo "response: std_srvs.srv.Trigger_Response(success=False, message='refused')"
+      fi
+    else
+      echo "response: std_srvs.srv.SetBool_Response(success=True, message='armed')"
+    fi ;;
 esac
 '''
 
@@ -67,6 +76,7 @@ def run(tmp_path, **overrides):
     calls = log.read_text().splitlines()
     enables = [c for c in calls if c.startswith('ros2 service call /camera_drive/enable')]
     ssh = [c for c in calls if c.startswith('ssh ')]
+    result.calls = calls
     return result, enables, ssh
 
 
@@ -121,6 +131,41 @@ def test_any_missing_condition_never_enables(tmp_path, missing):
 def test_gives_up_when_launch_is_gone(tmp_path):
     result, enables, ssh = run(tmp_path, NILARM_LAUNCH_PID='999999999')
     assert result.returncode == 1 and enables == []
+
+
+# --- OMX pre-scan request (parallel to Pinky departure) ----------------------
+
+def prescans(result):
+    return [c for c in result.calls
+            if c.startswith('ros2 service call /harvest/prescan')]
+
+
+def test_ready_requests_one_prescan_after_checks_and_still_enables(tmp_path):
+    result, enables, ssh = run(tmp_path)
+    assert result.returncode == 0 and len(enables) == 1
+    assert len(prescans(result)) == 1
+    calls = result.calls
+    last_check = max(i for i, c in enumerate(calls) if c.startswith('ros2 action info'))
+    assert calls.index(prescans(result)[0]) > last_check  # only after readiness
+    assert 'pre-scan: OMX scanning' in result.stdout
+
+
+def test_prescan_failure_never_blocks_the_normal_start(tmp_path):
+    result, enables, ssh = run(tmp_path, STUB_PRESCAN_OK='0')
+    assert result.returncode == 0 and len(enables) == 1
+    assert 'pre-scan: not started' in result.stdout
+
+
+def test_prescan_can_be_disabled(tmp_path):
+    result, enables, ssh = run(tmp_path, NILARM_PRESCAN='0')
+    assert result.returncode == 0 and len(enables) == 1
+    assert prescans(result) == []
+
+
+@pytest.mark.parametrize('missing', [{'STUB_CAMERA': '0'}, {'STUB_HARVEST': '0'}])
+def test_not_ready_never_requests_prescan(tmp_path, missing):
+    result, enables, ssh = run(tmp_path, STUB_SSH_STARTS_SERVER='0', **missing)
+    assert result.returncode == 1 and enables == [] and prescans(result) == []
 
 
 # --- laptop runner: never a second server -----------------------------------

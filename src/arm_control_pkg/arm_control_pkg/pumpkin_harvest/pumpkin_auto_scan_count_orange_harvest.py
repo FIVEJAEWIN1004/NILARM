@@ -534,7 +534,10 @@ def main(
     target_count: int | None = None,
     feedback_callback: FeedbackCallback | None = None,
     cancel_callback: CancelCallback | None = None,
+    before_harvest: Callable[[], bool] | None = None,
 ) -> HarvestRunResult:
+    """Scan, then harvest. ``before_harvest`` (pre-scan) runs between the two
+    with the arm at the central camera pose; False abandons the harvest."""
     if target_count is not None and target_count <= 0:
         raise ValueError("target_count must be positive when specified")
 
@@ -635,6 +638,10 @@ def main(
                 attempted_count,
             )
         ripe_clusters.sort(key=lambda c: math.hypot(c.x, c.y))
+        # Pre-scan: hold here (camera released, arm at the central pose)
+        # until Pinky's /harvest goal arrives; the scan is never repeated.
+        if before_harvest is not None and not before_harvest():
+            raise ScanCancelled
         print(f"{AUTO_COUNTDOWN_SEC}초 후 주황 호박 자동 집기를 시작합니다.")
         for remaining in range(AUTO_COUNTDOWN_SEC, 0, -1):
             raise_if_cancelled(cancel_callback)
