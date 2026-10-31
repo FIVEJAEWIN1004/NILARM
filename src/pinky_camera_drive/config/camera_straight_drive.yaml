@@ -106,12 +106,12 @@ camera_straight_drive:
     roi_left_ratio: 0.0
     roi_right_ratio: 0.70
 
-    yellow_h_low: 21
-    yellow_h_high: 30
-    yellow_s_low: 123
-    yellow_s_high: 185
-    yellow_v_low: 148
-    yellow_v_high: 216
+    yellow_h_low: 20
+    yellow_h_high: 41
+    yellow_s_low: 58
+    yellow_s_high: 194
+    yellow_v_low: 94
+    yellow_v_high: 178
     # Runtime-only S/V widening around the yellow_* calibration (H never
     # changes, YAML is never rewritten). false = exact legacy thresholds.
     hsv_adaptive_enabled: true

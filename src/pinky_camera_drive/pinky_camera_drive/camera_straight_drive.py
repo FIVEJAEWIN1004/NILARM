@@ -21,6 +21,11 @@ from std_srvs.srv import SetBool
 
 
 AUTO_REFERENCE_FRAMES = 15
+# Same name/meaning as arm_control_pkg ..._v4: leave STATION on the /harvest
+# feedback status="departure_ready" (last pumpkin released and risen to bin
+# hover) instead of the final result; the result is still received and logged.
+# False = depart only on a successful final result, as before.
+ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE = True
 
 
 class DriveState:
@@ -262,6 +267,8 @@ class CameraStraightDrive(Node):
         self.harvest_goal_handle = None
         self.harvest_shutting_down = False
         self.harvest_cycle_id = 0
+        self.harvest_departure_ready = False
+        self.harvest_departed_early = False
         self.station_start_x = None
         self.station_start_y = None
         self.station_start_yaw = None
@@ -1421,6 +1428,8 @@ class CameraStraightDrive(Node):
         self.harvest_goal_future = None
         self.harvest_result_future = None
         self.harvest_goal_handle = None
+        self.harvest_departure_ready = False
+        self.harvest_departed_early = False
 
     def _send_harvest_goal(self):
         if self.harvest_goal_sent or self.harvest_action_failed:
@@ -1433,7 +1442,8 @@ class CameraStraightDrive(Node):
         try:
             cycle_id = self.harvest_cycle_id
             self.harvest_goal_future = self.harvest_action_client.send_goal_async(
-                goal, feedback_callback=self._harvest_feedback_callback)
+                goal, feedback_callback=lambda message: (
+                    self._harvest_feedback_callback(message, cycle_id)))
             self.harvest_goal_future.add_done_callback(
                 lambda future: self._harvest_goal_response_callback(
                     future, cycle_id))
@@ -1465,13 +1475,30 @@ class CameraStraightDrive(Node):
         self.harvest_result_future.add_done_callback(
             lambda future: self._harvest_result_callback(future, cycle_id))
 
-    def _harvest_feedback_callback(self, feedback_message):
-        if self.harvest_shutting_down:
+    def _harvest_feedback_callback(self, feedback_message, cycle_id):
+        if (self.harvest_shutting_down
+                or cycle_id != self.harvest_cycle_id):
             return
         feedback = feedback_message.feedback
         self.get_logger().info(
             'Harvest feedback: '
             f'current_count={feedback.current_count}, status={feedback.status}')
+        if (feedback.status != 'departure_ready'
+                or not ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE
+                or self.harvest_departure_ready):
+            return
+        if int(feedback.current_count) < self.harvest_target_count:
+            self.get_logger().error(
+                'departure_ready ignored: '
+                f'current_count={feedback.current_count} < '
+                f'target_count={self.harvest_target_count}; waiting for result')
+            return
+        # Departs from the control loop; the goal is NOT cancelled and the
+        # result callback stays registered.
+        self.harvest_departure_ready = True
+        self.get_logger().warning(
+            'Harvest departure_ready: last pumpkin risen to bin hover; '
+            'departing before the final result (arm keeps cleaning up)')
 
     def _harvest_result_callback(self, future, cycle_id):
         if (self.harvest_shutting_down
@@ -1489,6 +1516,19 @@ class CameraStraightDrive(Node):
             result.success
             and self.harvested_count >= self.harvest_target_count)
         self.harvest_result_received = True
+        if self.harvest_departed_early:
+            # Already driving since departure_ready: never stop or re-depart.
+            if self.harvest_success:
+                self.get_logger().warning(
+                    'Harvest final result after early departure: succeeded, '
+                    f'harvested_count={self.harvested_count}')
+            else:
+                self.get_logger().error(
+                    'HARVEST FAILED AFTER EARLY DEPARTURE: '
+                    f'success={result.success}, '
+                    f'harvested_count={self.harvested_count}; Pinky keeps '
+                    'driving, check the arm/laptop log')
+            return
         if self.harvest_success:
             self.get_logger().warning(
                 'Harvest succeeded: '
@@ -1564,6 +1604,10 @@ class CameraStraightDrive(Node):
                         self.harvest_server_wait_logged = True
                     return
                 self._send_harvest_goal()
+                return
+            if self.harvest_departure_ready and not self.harvest_result_received:
+                self.harvest_departed_early = True
+                self._start_next_stop_from_station(now)
                 return
             if not self.harvest_result_received:
                 return

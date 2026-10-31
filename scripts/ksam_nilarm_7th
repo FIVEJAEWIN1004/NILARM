@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# PINKY: 7th KSAM match command (`ksam_nilarm_7th`, linked by setup_pinky.sh).
+# Before the normal `nilarm` match flow it makes the LAPTOP run the newest arm
+# code: over SSH it builds arm_control_pkg and restarts the /harvest server
+# (scripts/run_harvest_server.sh build / restart). Only when both succeed does
+# it exec this repo's `nilarm` (DISABLED drive, nilarm-start checks, prescan,
+# then /camera_drive/enable). Any failure: exit non-zero, Pinky never starts.
+# Laptop address: <repo>/.nilarm_remote_env (scripts/setup_remote_harvest.sh).
+#   ksam_nilarm_7th [competition.launch.py args]
+repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+export ROS_DOMAIN_ID=99
+say() { echo "[KSAM 7TH] $*"; }
+fail() {
+    echo "[KSAM 7TH] 실패: $*" >&2
+    echo "[KSAM 7TH] Pinky 주행을 시작하지 않습니다." >&2
+    exit 1
+}
+
+say "Pinky 대회 실행 준비 (ROS_DOMAIN_ID=${ROS_DOMAIN_ID})"
+if [[ -z "${NILARM_LAPTOP_HOST}" && -f "${repo}/.nilarm_remote_env" ]]; then
+    source "${repo}/.nilarm_remote_env"
+fi
+[[ -n "${NILARM_LAPTOP_HOST}" && -n "${NILARM_LAPTOP_USER}" ]] \
+    || fail "노트북 접속 설정 없음 (scripts/setup_remote_harvest.sh <user>@<laptop_ip>)"
+target="${NILARM_LAPTOP_USER}@${NILARM_LAPTOP_HOST}"
+key="${NILARM_SSH_KEY:-$HOME/.ssh/nilarm_laptop_ed25519}"
+ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes
+          -o ConnectTimeout="${NILARM_SSH_TIMEOUT:-5}"
+          -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -T)
+[[ -f "${key}" ]] && ssh_opts+=(-i "${key}" -o IdentitiesOnly=yes)
+runner="\$HOME/${NILARM_LAPTOP_REPO:-NILARM}/scripts/run_harvest_server.sh"
+
+laptop() {  # $1 = runner command, $2 = timeout s; 0 ok, 127 workspace missing, else failed
+    timeout "$2" ssh "${ssh_opts[@]}" "${target}" \
+        "[ -f \"${runner}\" ] || exit 127; ROS_DOMAIN_ID=${ROS_DOMAIN_ID} bash \"${runner}\" $1"
+}
+
+say "노트북 SSH 연결 확인 (${target})"
+timeout 15 ssh "${ssh_opts[@]}" "${target}" true \
+    || fail "노트북 SSH 연결 실패 (${target}; Wi-Fi/키/노트북 확인)"
+
+say "노트북 최신 로봇팔 코드 빌드"
+laptop build 900
+case $? in
+    0) ;;
+    127) fail "노트북 NILARM 작업공간 없음 (~/${NILARM_LAPTOP_REPO:-NILARM})" ;;
+    255) fail "빌드 중 노트북 SSH 연결 끊김" ;;
+    *) fail "노트북 원격 빌드 실패 (위 로그 확인)" ;;
+esac
+
+say "기존 수확 서버 재시작"
+laptop restart 120
+case $? in
+    0) ;;
+    255) fail "재시작 중 노트북 SSH 연결 끊김" ;;
+    *) fail "수확 서버 재시작 또는 /harvest 준비 확인 실패 (위 FAIL 확인)" ;;
+esac
+say "/harvest 서버 준비 완료"
+
+say "Pinky competition launch 시작"
+say "prescan 요청 및 주행 안전 게이트 대기"
+exec "${repo}/src/nilarm_bringup/scripts/nilarm" "$@"

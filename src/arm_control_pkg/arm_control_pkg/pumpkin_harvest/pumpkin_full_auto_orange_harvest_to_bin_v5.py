@@ -85,11 +85,34 @@ def run_harvest(
         _SPEED_CONFIGURED = True
 
     # Set on every run: the server process reuses this module across goals.
-    v4.departure_signal_gate = (
-        v4.wait_for_manual_departure_signal
-        if require_departure_confirmation
-        else v4.continue_without_departure_signal
-    )
+    # harvest_one records which pumpkin is in hand; the gate (v4 calls it only
+    # for is_last, after ⑲ rise + settle) sends ㉔ departure_ready once.
+    in_hand = {"index": 0, "total": 0, "sent": False}
+
+    def harvest_one(arm, calibration, cluster, gripper, index, total):
+        in_hand.update(index=index, total=total)
+        return v2.harvest_one_direct(
+            arm, calibration, cluster, gripper, index, total)
+
+    def departure_gate() -> None:
+        if require_departure_confirmation:
+            v4.wait_for_manual_departure_signal()
+        else:
+            v4.continue_without_departure_signal()
+        # is_last means index == total, so harvested_count == total here.
+        if (
+            not v4.ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE
+            or in_hand["sent"]
+            or in_hand["index"] != in_hand["total"]
+            or (cancel_callback is not None and cancel_callback())
+        ):
+            return
+        in_hand["sent"] = True
+        print("[출발 허가] 마지막 호박 상승 완료. Pinky 출발을 허가합니다.")
+        scan.emit_feedback(feedback_callback, in_hand["index"], "departure_ready")
+        print("[로봇팔 정리] Pinky 출발 후 마지막 정리 자세를 계속 수행합니다.")
+
+    v4.departure_signal_gate = departure_gate
 
     # Use the newly re-taught collision-aware bin poses exactly as saved.
     v2.DROP_RAISE_M = 0.0
@@ -126,7 +149,7 @@ def run_harvest(
         require_confirmation=require_harvest_confirmation,
         display_result_callback=display_result_callback,
     )
-    scan.harvest_one = v2.harvest_one_direct
+    scan.harvest_one = harvest_one
     scan.AUTO_COUNTDOWN_SEC = 0
     return scan.main(
         target_count=target_count,

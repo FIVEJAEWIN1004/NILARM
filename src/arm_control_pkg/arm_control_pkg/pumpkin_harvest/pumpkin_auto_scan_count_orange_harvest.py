@@ -35,11 +35,51 @@ SCAN_OFFSETS_DEG = (-140, -110, -80, -50, 70, 100, 130)
 # v5/v4 replace this scan-only timing function without changing harvest
 # pre-alignment or folded transport rotation timing.
 scan_movement_duration = multi.movement_duration
+post_scan_return_duration = scan_movement_duration
 # v5/v4 replace this target-aware wrapper so only entry into the first -140
 # degree view can be accelerated independently from the remaining sweep.
 scan_target_movement_duration = (
     lambda _commanded_deg, delta_deg: scan_movement_duration(delta_deg)
 )
+
+
+def reset_harvest_motion_state() -> None:
+    """Reset optional motion state installed by a competition wrapper."""
+
+
+def prepare_arm_for_cleanup(_arm) -> bool:
+    """Run optional wrapper cleanup and report whether parking is safe."""
+    return False
+
+
+def wait_for_scan_settle(
+    _arm,
+    _target_joints,
+    max_settle_sec: float,
+    _cancel_callback=None,
+) -> bool:
+    """Default scan settling; v4 may install feedback-based settling."""
+    time.sleep(float(max_settle_sec))
+    return False
+
+
+def prepare_harvest_targets(
+    _arm,
+    _calibration,
+    clusters: list[PumpkinCluster],
+) -> list[PumpkinCluster]:
+    """Default deterministic distance ordering; v4 may pre-plan and reorder."""
+    return sorted(clusters, key=lambda cluster: math.hypot(cluster.x, cluster.y))
+
+
+def should_end_scan_early(
+    _clusters: list[PumpkinCluster],
+    _target_count: int | None,
+) -> bool:
+    """Competition default always completes all calibrated scan views."""
+    return False
+
+
 SCAN_FRAME_COUNT = 8
 SCAN_FLUSH_FRAMES = 4
 CAMERA_REOPEN_ATTEMPTS = 5
@@ -50,6 +90,10 @@ VIEW_MATCH_DISTANCE_M = 0.030
 DUPLICATE_DISTANCE_M = 0.050
 RESTORE_GRIPPER_DURATION_SEC = 3.0
 AUTO_COUNTDOWN_SEC = 3
+INITIAL_GRIPPER_DURATION_SEC = 1.5
+INITIAL_READY_DURATION_SEC = 2.3
+INITIAL_CAMERA_MOVE_DURATION_SEC = 1.7
+INITIAL_CAMERA_SETTLE_TIME_SEC = 0.5
 
 
 class ScanCancelled(Exception):
@@ -202,6 +246,22 @@ def normalized_gripper_value(arm) -> float:
     if not np.isfinite(value):
         raise RuntimeError("현재 기본 그리퍼 폭을 계산하지 못했습니다.")
     return min(1.0, max(0.0, float(value)))
+
+
+def initialize_arm_for_scan(arm, camera_joints) -> float:
+    """Prepare the gripper and arm for the competition scan."""
+    arm.gripper(
+        omx_robot.GRIPPER_READY,
+        duration=INITIAL_GRIPPER_DURATION_SEC,
+    )
+    arm.move_joints(omx_robot.READY, duration=INITIAL_READY_DURATION_SEC)
+    default_gripper_value = normalized_gripper_value(arm)
+    arm.move_joints(
+        camera_joints,
+        duration=INITIAL_CAMERA_MOVE_DURATION_SEC,
+    )
+    time.sleep(INITIAL_CAMERA_SETTLE_TIME_SEC)
+    return default_gripper_value
 
 
 def add_view_detection(tracks: list[ViewTrack], detection: Detection) -> None:
@@ -452,6 +512,11 @@ def make_original_height_target(target: dict) -> dict:
     return result
 
 
+def park_arm(arm) -> None:
+    """㉒ final park; v4/v5 replace this with joint-speed timing."""
+    arm.park()
+
+
 def harvest_one(
     arm,
     calibration,
@@ -549,6 +614,7 @@ def main(
     successes = 0
     detected_ripe_count = 0
     attempted_count = 0
+    reset_harvest_motion_state()
 
     try:
         raise_if_cancelled(cancel_callback)
@@ -571,14 +637,10 @@ def main(
 
         print("OMX 로봇팔에 연결합니다.")
         arm = OmxFollower().connect()
-        arm.ready(duration=5.0)
-        default_gripper_value = normalized_gripper_value(arm)
-        print(f"시작 시 기본 그리퍼 폭 저장: {default_gripper_value:.3f}")
-
         camera_joints = calibration["camera_joints"]
         base_joint1_deg = float(np.degrees(camera_joints[0]))
-        arm.move_joints(camera_joints, duration=base.CAMERA_MOVE_DURATION_SEC)
-        time.sleep(base.SETTLE_TIME_SEC)
+        default_gripper_value = initialize_arm_for_scan(arm, camera_joints)
+        print(f"시작 시 기본 그리퍼 폭 저장: {default_gripper_value:.3f}")
         safe_to_park = True
 
         clusters: list[PumpkinCluster] = []
@@ -599,7 +661,12 @@ def main(
                 duration=scan_target_movement_duration(commanded, delta),
             )
             current_scan_offset = float(commanded)
-            time.sleep(base.SETTLE_TIME_SEC)
+            wait_for_scan_settle(
+                arm,
+                view_joints,
+                base.SETTLE_TIME_SEC,
+                cancel_callback,
+            )
             measured = np.asarray(arm.joints(), dtype=float)
             measured_offset = float(np.degrees(measured[0])) - base_joint1_deg
             tracks, cap = observe_angle(
@@ -614,11 +681,14 @@ def main(
             print(f"{commanded:+d}도 안정 검출: {len(tracks)}개")
             for track in tracks:
                 add_global_track(clusters, track)
+            if should_end_scan_early(clusters, target_count):
+                print("[적응형 스캔] 보수적 종료 조건을 충족해 남은 각도를 생략합니다.")
+                break
 
         print("\n전 범위 스캔 완료. 중앙 접힘 자세로 복귀합니다.")
         arm.move_joints(
             camera_joints,
-            duration=scan_movement_duration(current_scan_offset),
+            duration=post_scan_return_duration(current_scan_offset),
         )
         current_scan_offset = 0.0
         safe_to_park = True
@@ -637,7 +707,11 @@ def main(
                 detected_ripe_count,
                 attempted_count,
             )
-        ripe_clusters.sort(key=lambda c: math.hypot(c.x, c.y))
+        ripe_clusters = prepare_harvest_targets(
+            arm,
+            calibration,
+            ripe_clusters,
+        )
         # Pre-scan: hold here (camera released, arm at the central pose)
         # until Pinky's /harvest goal arrives; the scan is never repeated.
         if before_harvest is not None and not before_harvest():
@@ -696,6 +770,7 @@ def main(
     except ScanCancelled:
         print("사용자가 자동 스캔을 취소했습니다. 수확하지 않습니다.")
         if arm is not None and calibration is not None:
+            prepare_arm_for_cleanup(arm)
             arm.move_joints(
                 calibration["camera_joints"],
                 duration=scan_movement_duration(current_scan_offset),
@@ -728,9 +803,12 @@ def main(
         cv2.destroyAllWindows()
         if arm is not None:
             try:
+                recovered_for_cleanup = prepare_arm_for_cleanup(arm)
+                if recovered_for_cleanup:
+                    safe_to_park = True
                 if safe_to_park:
                     print("정리 자세로 이동합니다.")
-                    arm.park()
+                    park_arm(arm)
                 else:
                     print("자동 정리 자세를 생략합니다. 로봇 상태를 직접 확인하세요.")
             finally:

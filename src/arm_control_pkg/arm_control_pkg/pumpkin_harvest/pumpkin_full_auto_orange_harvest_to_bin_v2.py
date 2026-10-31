@@ -12,7 +12,9 @@ Changes from v1:
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import dataclass
 import json
+import math
 from pathlib import Path
 import time
 
@@ -20,6 +22,7 @@ import numpy as np
 
 from vision_pkg.pumpkin_detection import spatial_tracking
 
+from . import joint_trajectory
 from . import pumpkin_auto_scan_count_orange_harvest as scan
 
 
@@ -29,29 +32,186 @@ BIN_HOVER_DURATION_SEC = 8.0
 BIN_DROP_DURATION_SEC = 3.0
 BIN_FOLD_DURATION_SEC = 8.0
 BIN_SETTLE_SEC = 0.7
-HELD_TRANSPORT_SPEED_MULTIPLIER = 2.0
-PUMPKIN_PREPOSITION_SPEED_MULTIPLIER = 2.0
+# The normal scan step (③) averages 22.53 deg/s.  21.9 deg/s keeps the
+# quintic peak (x1.875 = 41.06 deg/s) under the ~41.2 deg/s servo Profile
+# Velocity.  Each floor keeps short moves gentle; held moves are stricter.
+TARGET_AVERAGE_JOINT_SPEED_DPS = 21.9
+SERVO_PROFILE_VELOCITY_DPS = 41.2
+SERVO_PROFILE_ACCELERATION_DPS2 = 215.0
+QUINTIC_PEAK_VELOCITY_FACTOR = 1.875
+QUINTIC_PEAK_ACCELERATION_FACTOR = 5.7735
+SAFE_APPROACH_SPEEDUP = 1.3
+HELD_BIN_MOVE_SPEEDUP = 1.3
+SAFE_APPROACH_PREALIGN_MIN_DURATION_SEC = 1.2
+SAFE_APPROACH_HIGH_MIN_DURATION_SEC = 1.4
+LIFT_STEP_MIN_DURATION_SEC = 0.8
+LIFT_EARLY_SPEEDUP = 1.7
+LIFT_EARLY_MIN_DURATION_SEC = 0.50
+HELD_FOLD_MIN_DURATION_SEC = 1.4
+HELD_BIN_ROTATION_MIN_DURATION_SEC = 1.5
+FINAL_APPROACH_DURATIONS_SEC = (2.5, 2.0, 2.0)
+# The lift passes +10/+30 mm without stopping; at +80 mm only joints that
+# keep their direction into the fold continue, at no more than this speed.
+LIFT_TO_FOLD_VIA_SPEED_DPS = 5.0
 
 _BIN_HOVER_JOINTS: np.ndarray | None = None
 _BIN_DROP_JOINTS: np.ndarray | None = None
 _BIN_FOLDED_JOINTS: np.ndarray | None = None
 _ORIGINAL_PRINT_SUMMARY = scan.print_summary
+_precomputed_harvest_plans: dict[int, "HarvestPlan"] = {}
 
 
-def held_transport_duration(current_duration_sec: float) -> float:
-    """Run only grasped-pumpkin lift/fold/transport at twice current speed."""
-    duration = float(current_duration_sec)
-    if duration <= 0.0:
-        raise ValueError("운반 이동 시간은 0보다 커야 합니다.")
-    return duration / HELD_TRANSPORT_SPEED_MULTIPLIER
+def next_target_approach_completed() -> None:
+    """Notify an optional wrapper after the next pre-alignment completes."""
 
 
-def pumpkin_preposition_duration(current_duration_sec: float) -> float:
-    """Double only folded target alignment and high free-space approach."""
-    duration = float(current_duration_sec)
-    if duration <= 0.0:
-        raise ValueError("수확 준비 이동 시간은 0보다 커야 합니다.")
-    return duration / PUMPKIN_PREPOSITION_SPEED_MULTIPLIER
+def direct_hover_approach_delta_guard_bypass_enabled() -> bool:
+    """Keep the normal folded-pose approach guards unless v4 opts in."""
+    return False
+
+
+def continuous_safe_approach_enabled() -> bool:
+    """Keep the verified stop-to-stop approach unless v4 opts in."""
+    return False
+
+
+@dataclass
+class HarvestPlan:
+    """Pre-harvest feasibility and estimated approach cost for one cluster."""
+
+    cluster: scan.PumpkinCluster
+    observation: scan.Detection | None
+    corrected_target: dict | None
+    prealign_joints: np.ndarray | None
+    joints_stages: list[np.ndarray] | None
+    approach_deltas: list | None
+    predicted_approach_duration: float
+    predicted_joint_cost: float
+    valid: bool
+    rejection_reason: str = ""
+    original_index: int = 0
+
+
+def wait_until_arm_settled(
+    arm,
+    target_joints,
+    *,
+    min_settle_sec: float,
+    max_settle_sec: float,
+    position_tolerance_deg: float = 0.5,
+    velocity_tolerance_dps: float = 0.5,
+    stable_window_sec: float = 0.15,
+    sample_period_sec: float = 0.05,
+    cancel_callback=None,
+) -> bool:
+    """Return early on stable feedback, falling back to the original timeout."""
+    started = time.monotonic()
+    deadline = started + float(max_settle_sec)
+    target = np.asarray(target_joints, dtype=float)
+    previous = None
+    previous_time = None
+    stable_since = None
+
+    while True:
+        if cancel_callback is not None and cancel_callback():
+            raise scan.ScanCancelled
+        now = time.monotonic()
+        remaining = deadline - now
+        if remaining <= 0.0:
+            return False
+        time.sleep(min(float(sample_period_sec), remaining))
+        now = time.monotonic()
+        try:
+            current = np.asarray(arm.joints(), dtype=float)
+            if current.shape != target.shape or not np.all(np.isfinite(current)):
+                raise ValueError("invalid joint feedback")
+        except (AttributeError, TypeError, ValueError, RuntimeError):
+            remaining = deadline - now
+            if remaining > 0.0:
+                time.sleep(remaining)
+            return False
+
+        if previous is None:
+            velocity = np.inf
+        else:
+            dt = max(now - float(previous_time), 1e-6)
+            velocity = float(
+                np.max(np.abs(np.degrees(current - previous))) / dt
+            )
+        position_error = float(
+            np.max(np.abs(np.degrees(current - target)))
+        )
+        elapsed = now - started
+        stable = (
+            elapsed >= float(min_settle_sec)
+            and position_error <= float(position_tolerance_deg)
+            and velocity <= float(velocity_tolerance_dps)
+        )
+        if stable:
+            if stable_since is None:
+                stable_since = now
+            if now - stable_since >= float(stable_window_sec):
+                return True
+        else:
+            stable_since = None
+        previous = current
+        previous_time = now
+
+
+def duration_for_target_joint_speed(
+    start_joints,
+    target_joints,
+    *,
+    min_duration: float,
+    target_speed_dps: float = TARGET_AVERAGE_JOINT_SPEED_DPS,
+) -> float:
+    """Time a joint move [rad] so its largest joint averages <= target speed."""
+    delta = np.asarray(target_joints, dtype=float) - np.asarray(
+        start_joints, dtype=float
+    )
+    max_delta_deg = float(np.max(np.abs(np.degrees(delta))))
+    return max(float(min_duration), max_delta_deg / target_speed_dps)
+
+
+def duration_with_safe_speedup(
+    start_joints,
+    target_joints,
+    *,
+    min_duration: float,
+    speedup: float,
+) -> float:
+    """Shorten a move by the requested factor within OMX profile limits."""
+    delta = np.asarray(target_joints, dtype=float) - np.asarray(
+        start_joints, dtype=float
+    )
+    max_delta_deg = float(np.max(np.abs(np.degrees(delta))))
+    current = duration_for_target_joint_speed(
+        start_joints,
+        target_joints,
+        min_duration=min_duration,
+    )
+    velocity_floor = (
+        max_delta_deg * QUINTIC_PEAK_VELOCITY_FACTOR
+        / SERVO_PROFILE_VELOCITY_DPS
+    )
+    acceleration_floor = (
+        QUINTIC_PEAK_ACCELERATION_FACTOR * max_delta_deg
+        / SERVO_PROFILE_ACCELERATION_DPS2
+    ) ** 0.5
+    return max(current / float(speedup), velocity_floor, acceleration_floor)
+
+
+def early_lift_duration(start_joints, target_joints) -> float:
+    """Speed up only the first two lift segments, with a final 0.50 s floor."""
+    return max(
+        LIFT_EARLY_MIN_DURATION_SEC,
+        duration_with_safe_speedup(
+            start_joints,
+            target_joints,
+            min_duration=LIFT_STEP_MIN_DURATION_SEC,
+            speedup=LIFT_EARLY_SPEEDUP,
+        ),
+    )
 
 
 def require_full_auto_start() -> None:
@@ -167,6 +327,151 @@ def select_grasp_z_correction_angle(
     return selected_angle
 
 
+def corrected_target_for_cluster(
+    cluster: scan.PumpkinCluster,
+) -> tuple[scan.Detection, dict, int]:
+    """Build the same corrected target used by the real harvest path."""
+    observation = cluster.best_orange()
+    if observation is None:
+        raise ValueError("수확 가능한 주황 관측이 없습니다.")
+    selected_angle = int(round(observation.commanded_offset_deg))
+    correction_angle = select_grasp_z_correction_angle(
+        cluster,
+        selected_angle,
+    )
+    target = scan.make_original_height_target(observation.target)
+    target = apply_angle_grasp_z_offset(target, correction_angle)
+    return observation, target, correction_angle
+
+
+def solve_harvest_approach(
+    arm,
+    calibration,
+    cluster: scan.PumpkinCluster,
+    current_joints,
+    *,
+    bypass_high_delta_guard: bool,
+):
+    """Reuse production corrections and IK for pre-plan and live re-plan."""
+    observation, target, correction_angle = corrected_target_for_cluster(
+        cluster
+    )
+    prealign, prealign_delta, joints_stages, deltas = (
+        scan.multi.plan_fixed_pose_stages_from_folded_pose(
+            arm,
+            target["xyz_stages"],
+            np.asarray(current_joints, dtype=float),
+            calibration["pitch_rad"],
+            calibration["roll_rad"],
+            bypass_high_delta_guard=bypass_high_delta_guard,
+        )
+    )
+    prealign_duration = duration_with_safe_speedup(
+        current_joints,
+        prealign,
+        min_duration=SAFE_APPROACH_PREALIGN_MIN_DURATION_SEC,
+        speedup=SAFE_APPROACH_SPEEDUP,
+    )
+    high_duration = duration_with_safe_speedup(
+        prealign,
+        joints_stages[0],
+        min_duration=SAFE_APPROACH_HIGH_MIN_DURATION_SEC,
+        speedup=SAFE_APPROACH_SPEEDUP,
+    )
+    return (
+        observation,
+        target,
+        correction_angle,
+        prealign,
+        prealign_delta,
+        joints_stages,
+        deltas,
+        prealign_duration,
+        high_duration,
+    )
+
+
+def precompute_harvest_plans(
+    arm,
+    calibration,
+    clusters: list[scan.PumpkinCluster],
+    *,
+    bypass_high_delta_guard: bool,
+) -> list[HarvestPlan]:
+    """Validate every target before motion and estimate its approach cost."""
+    current_joints = np.asarray(arm.joints(), dtype=float)
+    plans = []
+    for original_index, cluster in enumerate(clusters):
+        try:
+            (
+                observation,
+                target,
+                _correction_angle,
+                prealign,
+                _prealign_delta,
+                joints_stages,
+                deltas,
+                prealign_duration,
+                high_duration,
+            ) = solve_harvest_approach(
+                arm,
+                calibration,
+                cluster,
+                current_joints,
+                bypass_high_delta_guard=bypass_high_delta_guard,
+            )
+            plans.append(HarvestPlan(
+                cluster=cluster,
+                observation=observation,
+                corrected_target=target,
+                prealign_joints=prealign,
+                joints_stages=joints_stages,
+                approach_deltas=deltas,
+                predicted_approach_duration=(
+                    prealign_duration + high_duration
+                ),
+                predicted_joint_cost=prealign_duration + high_duration,
+                valid=True,
+                original_index=original_index,
+            ))
+        except (ValueError, RuntimeError) as error:
+            plans.append(HarvestPlan(
+                cluster=cluster,
+                observation=cluster.best_orange(),
+                corrected_target=None,
+                prealign_joints=None,
+                joints_stages=None,
+                approach_deltas=None,
+                predicted_approach_duration=float("inf"),
+                predicted_joint_cost=float("inf"),
+                valid=False,
+                rejection_reason=str(error),
+                original_index=original_index,
+            ))
+    return plans
+
+
+def order_precomputed_harvest_plans(
+    plans: list[HarvestPlan],
+    *,
+    optimize_joint_cost: bool,
+) -> list[HarvestPlan]:
+    """Return feasible plans deterministically, optionally by motion cost."""
+    valid = [plan for plan in plans if plan.valid]
+    if optimize_joint_cost:
+        valid.sort(key=lambda plan: (
+            plan.predicted_joint_cost,
+            math.hypot(plan.cluster.x, plan.cluster.y),
+            plan.original_index,
+        ))
+    else:
+        valid.sort(key=lambda plan: (
+            math.hypot(plan.cluster.x, plan.cluster.y),
+            plan.original_index,
+        ))
+    return valid
+
+
 def add_global_track_one_to_one(
     clusters: list[scan.PumpkinCluster],
     track: scan.ViewTrack,
@@ -235,30 +540,51 @@ def move_held_pumpkin_to_bin(
     if _BIN_FOLDED_JOINTS is None:
         raise RuntimeError("적재함 운반 자세가 준비되지 않았습니다.")
 
-    for index in (2, 1, 0):
-        clearance_mm = scan.grasp.APPROACH_CLEARANCES_M[index] * 1000.0
-        print(f"[운반 준비] 집기점 +{clearance_mm:.0f} mm로 상승합니다.")
-        arm.move_joints(
-            joints_stages[index],
-            duration=held_transport_duration(
-                scan.grasp.LIFT_STEP_DURATION_SEC
-            ),
-        )
-
-    print("[운반 준비] 과실 방향에서 팔을 접습니다.")
-    arm.move_joints(
+    # Time the first lift step from where the arm really is, as move_joints does.
+    lift_path = [np.asarray(arm.joints(), dtype=float)] + [
+        joints_stages[index] for index in (2, 1, 0)
+    ]
+    segments = []
+    for index, (start, target) in enumerate(
+        zip(lift_path, lift_path[1:])
+    ):
+        if index < 2:
+            duration = early_lift_duration(start, target)
+        else:
+            duration = duration_for_target_joint_speed(
+                start,
+                target,
+                min_duration=LIFT_STEP_MIN_DURATION_SEC,
+            )
+        segments.append((target, duration))
+    segments.append((
         prealign_joints,
-        duration=held_transport_duration(scan.grasp.RETURN_DURATION_SEC),
+        duration_with_safe_speedup(
+            joints_stages[0],
+            prealign_joints,
+            min_duration=HELD_FOLD_MIN_DURATION_SEC,
+            speedup=HELD_BIN_MOVE_SPEEDUP,
+        ),
+    ))
+    print("[운반 준비] +10/+30 mm를 멈추지 않고 지나 +80 mm까지 상승한 뒤 팔을 접습니다.")
+    joint_trajectory.move_joints_continuous(
+        arm,
+        segments,
+        via_speed_caps_dps=(
+            TARGET_AVERAGE_JOINT_SPEED_DPS,
+            TARGET_AVERAGE_JOINT_SPEED_DPS,
+            LIFT_TO_FOLD_VIA_SPEED_DPS,
+        ),
     )
 
-    rotation_deg = float(
-        np.degrees(_BIN_FOLDED_JOINTS[0] - prealign_joints[0])
-    )
     print("[운반] 중앙 기본 각도를 거치지 않고 접힌 상태로 적재함 방향에 이동합니다.")
     arm.move_joints(
         _BIN_FOLDED_JOINTS,
-        duration=held_transport_duration(
-            scan.multi.movement_duration(rotation_deg)
+        duration=duration_with_safe_speedup(
+            prealign_joints,
+            _BIN_FOLDED_JOINTS,
+            min_duration=HELD_BIN_ROTATION_MIN_DURATION_SEC,
+            speedup=HELD_BIN_MOVE_SPEEDUP,
         ),
     )
 
@@ -338,37 +664,36 @@ def harvest_one_direct(
     harvest_index: int,
     harvest_total: int,
 ):
-    observation = cluster.best_orange()
-    if observation is None:
+    current_joints = np.asarray(arm.joints(), dtype=float)
+    bypass_high_delta_guard = bool(
+        direct_hover_approach_delta_guard_bypass_enabled()
+    )
+    try:
+        (
+            observation,
+            target,
+            z_correction_angle,
+            prealign,
+            _prealign_delta,
+            joints_stages,
+            _deltas,
+            prealign_duration,
+            high_approach_duration,
+        ) = solve_harvest_approach(
+            arm,
+            calibration,
+            cluster,
+            current_joints,
+            bypass_high_delta_guard=bypass_high_delta_guard,
+        )
+    except (ValueError, RuntimeError) as error:
+        print(f"[수확 건너뜀] {harvest_index}번 IK 실패: {error}")
         return False
 
     observed_angles = sorted(
         {int(round(item.commanded_offset_deg)) for item in cluster.observations}
     )
     selected_angle = int(round(observation.commanded_offset_deg))
-    z_correction_angle = select_grasp_z_correction_angle(
-        cluster,
-        selected_angle,
-    )
-    target = scan.make_original_height_target(observation.target)
-    target = apply_angle_grasp_z_offset(
-        target,
-        z_correction_angle,
-    )
-    current_joints = np.asarray(arm.joints(), dtype=float)
-    try:
-        prealign, prealign_delta, joints_stages, _deltas = (
-            scan.multi.plan_fixed_pose_stages_from_folded_pose(
-                arm,
-                target["xyz_stages"],
-                current_joints,
-                calibration["pitch_rad"],
-                calibration["roll_rad"],
-            )
-        )
-    except (ValueError, RuntimeError) as error:
-        print(f"[수확 건너뜀] {harvest_index}번 IK 실패: {error}")
-        return False
 
     print(
         f"\n[주황 호박 자동 수확 {harvest_index}/{harvest_total}] "
@@ -384,22 +709,58 @@ def harvest_one_direct(
     )
     print("집기 전 그리퍼를 최대로 열지 않고 기본 폭을 유지합니다.")
 
-    arm.move_joints(
-        prealign,
-        duration=pumpkin_preposition_duration(
-            scan.multi.movement_duration(prealign_delta)
-        ),
-    )
-    arm.move_joints(
-        joints_stages[0],
-        duration=pumpkin_preposition_duration(
-            scan.grasp.HIGH_MOVE_DURATION_SEC
-        ),
-    )
-    for index in (1, 2, 3):
+    if bypass_high_delta_guard:
+        # Keep a 10 ms safety margin above a profile-limit floor instead of
+        # rounding a calculated 3.463... seconds down in the command/log.
+        high_approach_duration = (
+            np.ceil(high_approach_duration * 100.0) / 100.0
+        )
+        max_delta_deg = float(
+            np.max(np.abs(np.degrees(joints_stages[0] - prealign)))
+        )
+        print(
+            "[직행 접근] 상공 직행 모드이므로 +80mm 접근 변화량 "
+            "소프트 제한을 생략합니다."
+        )
+        print(
+            f"[직행 접근] 최대 관절 변화 {max_delta_deg:.1f}도, "
+            f"안전 duration {high_approach_duration:.2f}초"
+        )
+
+    if continuous_safe_approach_enabled():
+        try:
+            joint_trajectory.move_joints_continuous(
+                arm,
+                (
+                    (prealign, prealign_duration),
+                    (joints_stages[0], high_approach_duration),
+                ),
+                via_speed_caps_dps=(0.0,),
+            )
+            next_target_approach_completed()
+            print("[연속 접근] prealign과 +80mm waypoint 검증 경로를 완료했습니다.")
+        except ValueError as error:
+            print(f"[연속 접근 fallback] {error}; 기존 정지형 접근을 사용합니다.")
+            arm.move_joints(prealign, duration=prealign_duration)
+            next_target_approach_completed()
+            arm.move_joints(
+                joints_stages[0],
+                duration=high_approach_duration,
+            )
+    else:
+        arm.move_joints(prealign, duration=prealign_duration)
+        next_target_approach_completed()
+        arm.move_joints(
+            joints_stages[0],
+            duration=high_approach_duration,
+        )
+    for index, duration in zip(
+        (1, 2, 3),
+        FINAL_APPROACH_DURATIONS_SEC,
+    ):
         arm.move_joints(
             joints_stages[index],
-            duration=scan.grasp.LOWER_MOVE_DURATION_SEC,
+            duration=duration,
         )
 
     print("[집기] 전류 제한을 사용해 그리퍼를 닫습니다.")

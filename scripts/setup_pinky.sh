@@ -45,7 +45,9 @@ if [[ "$1" != "--no-command" ]]; then
     ln -sfn "${scripts}/nilarm-start" "$HOME/.local/bin/nilarm-start"
     # Opens the HSV calibrator on the laptop screen (calibrator runs there).
     ln -sfn "${repo}/scripts/start_remote_hsv_calibrate.sh" "$HOME/.local/bin/ksam_hsv_calibrate"
-    echo "Installed: ~/.local/bin/nilarm, ~/.local/bin/nilarm-start, ~/.local/bin/ksam_hsv_calibrate"
+    # 7th KSAM match: laptop arm build + /harvest restart, then nilarm.
+    ln -sfn "${repo}/scripts/ksam_nilarm_7th" "$HOME/.local/bin/ksam_nilarm_7th"
+    echo "Installed: ~/.local/bin/nilarm, ~/.local/bin/nilarm-start, ~/.local/bin/ksam_hsv_calibrate, ~/.local/bin/ksam_nilarm_7th"
     case ":$PATH:" in
         *":$HOME/.local/bin:"*) ;;
         *) echo "~/.local/bin is not on PATH in this shell; open a new login shell (ssh again)." ;;
@@ -57,6 +59,7 @@ cat <<'USAGE'
 Ready. One time for the laptop link: ./scripts/setup_remote_harvest.sh <user>@<laptop_ip>
 Every match:
   nilarm          # starts Pinky + laptop /harvest server, checks everything, then STARTs
+  ksam_nilarm_7th # 7th KSAM: rebuild + restart laptop /harvest first, then nilarm
 If a check fails the robot stays stopped; fix it and run `nilarm-start`.
 Do not run the laptop camera_straight_drive (exactly one drive node allowed).
 USAGE

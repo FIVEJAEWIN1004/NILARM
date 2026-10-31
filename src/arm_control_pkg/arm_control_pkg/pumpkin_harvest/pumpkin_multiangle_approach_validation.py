@@ -229,7 +229,13 @@ def inverse_with_wrapped_joint1(
 
 
 def plan_fixed_pose_stages_from_folded_pose(
-    arm, xyz_stages, current_joints, pitch_rad, roll_rad
+    arm,
+    xyz_stages,
+    current_joints,
+    pitch_rad,
+    roll_rad,
+    *,
+    bypass_high_delta_guard=False,
 ):
     """Plan a folded joint1 pre-alignment and fixed-pose approach stages."""
     joints_stages = []
@@ -265,10 +271,15 @@ def plan_fixed_pose_stages_from_folded_pose(
         max_delta = float(np.max(delta_deg))
         total_delta = float(np.sum(delta_deg))
         if index == 0:
-            if max_delta > base.MAX_HIGH_SINGLE_JOINT_CHANGE_DEG:
-                raise ValueError(f"80mm 접근 단일 관절 변화 {max_delta:.1f}도")
-            if total_delta > base.MAX_HIGH_TOTAL_JOINT_CHANGE_DEG:
-                raise ValueError(f"80mm 접근 전체 관절 변화 {total_delta:.1f}도")
+            if not bypass_high_delta_guard:
+                if max_delta > base.MAX_HIGH_SINGLE_JOINT_CHANGE_DEG:
+                    raise ValueError(
+                        f"80mm 접근 단일 관절 변화 {max_delta:.1f}도"
+                    )
+                if total_delta > base.MAX_HIGH_TOTAL_JOINT_CHANGE_DEG:
+                    raise ValueError(
+                        f"80mm 접근 전체 관절 변화 {total_delta:.1f}도"
+                    )
         else:
             if max_delta > base.MAX_LOWER_SINGLE_JOINT_CHANGE_DEG:
                 raise ValueError(f"하강 단일 관절 변화 {max_delta:.1f}도")
