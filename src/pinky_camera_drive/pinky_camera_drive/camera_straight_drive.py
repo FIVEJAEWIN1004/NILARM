@@ -137,7 +137,7 @@ class CameraStraightDrive(Node):
         self.declare_parameter('manual_station_departure', True)
         self.declare_parameter('use_harvest_action', True)
         self.declare_parameter('harvest_target_count', 1)
-        self.declare_parameter('next_stop_target_forward_m', 0.26)
+        self.declare_parameter('next_stop_target_forward_m', 0.28)
         self.declare_parameter('next_stop_target_right_m', 0.30)
         self.declare_parameter('next_stop_target_yaw_deg', -90.0)
         self.declare_parameter('next_stop_linear_speed', 0.05)
@@ -1557,7 +1557,10 @@ class CameraStraightDrive(Node):
             f'⑨ distance={self.curve_distance:.3f}m, '
             f'position_error={position_error:.3f}m, '
             f'yaw_error={math.degrees(yaw_error):.1f}deg; '
-            'target forward=0.26m, right=0.30m, yaw=-90deg; STOPPING')
+            f'target forward={self.next_stop_target_forward:.2f}m, '
+            f'right={self.next_stop_target_right:.2f}m, '
+            f'yaw={math.degrees(self.next_stop_target_yaw_relative):.0f}deg; '
+            'STOPPING')
 
     def _start_station_final_approach(self, now):
         self.command_active = False
