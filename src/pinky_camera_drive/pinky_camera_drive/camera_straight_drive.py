@@ -54,6 +54,7 @@ class DriveState:
     STATION_REACHED = 'STATION_REACHED'
     STATION_LOAD_WAIT = 'STATION_LOAD_WAIT'
     STATION_TO_NEXT_STOP = 'STATION_TO_NEXT_STOP'
+    NEXT_STOP_WAIT = 'NEXT_STOP_WAIT'
     FINAL_REACHED = 'FINAL_REACHED'
     FAULT = 'FAULT'
 
@@ -146,6 +147,13 @@ class CameraStraightDrive(Node):
         self.declare_parameter('next_stop_max_angular_z', 0.10)
         self.declare_parameter('next_stop_max_angular_accel', 0.40)
         self.declare_parameter('next_stop_goal_slowdown_gain', 0.8)
+        # ⑩: after ⑨ wait, then a second curve with ⑨'s speed/limits.
+        self.declare_parameter('next_stop_wait_sec', 3.5)
+        self.declare_parameter('next_stop2_target_forward_m', 0.13)
+        self.declare_parameter('next_stop2_target_right_m', 0.13)
+        self.declare_parameter('next_stop2_target_yaw_deg', -90.0)
+        self.declare_parameter('next_stop2_start_handle_m', 0.072)
+        self.declare_parameter('next_stop2_end_handle_m', 0.072)
         self.declare_parameter('target_x', 320.0)
         self.declare_parameter('boundary_reference_x', 23.0)
         self.declare_parameter('boundary_eval_y_ratio', 0.80)
@@ -465,6 +473,18 @@ class CameraStraightDrive(Node):
             self.get_parameter('next_stop_max_angular_accel').value)
         self.next_stop_goal_slowdown_gain = float(
             self.get_parameter('next_stop_goal_slowdown_gain').value)
+        self.next_stop_wait_sec = float(
+            self.get_parameter('next_stop_wait_sec').value)
+        self.next_stop2_target_forward = float(
+            self.get_parameter('next_stop2_target_forward_m').value)
+        self.next_stop2_target_right = float(
+            self.get_parameter('next_stop2_target_right_m').value)
+        self.next_stop2_target_yaw_relative = math.radians(float(
+            self.get_parameter('next_stop2_target_yaw_deg').value))
+        self.next_stop2_start_handle = float(
+            self.get_parameter('next_stop2_start_handle_m').value)
+        self.next_stop2_end_handle = float(
+            self.get_parameter('next_stop2_end_handle_m').value)
         self.target_x_config = float(self.get_parameter('target_x').value)
         self.boundary_reference_x = float(
             self.get_parameter('boundary_reference_x').value)
@@ -571,6 +591,8 @@ class CameraStraightDrive(Node):
                 self.next_stop_max_angular_z,
                 self.next_stop_max_angular_accel,
                 self.next_stop_goal_slowdown_gain,
+                self.next_stop2_start_handle,
+                self.next_stop2_end_handle,
         ) <= 0.0:
             raise ValueError('station stop/safety parameters must be positive')
         if self.test_forward_speed > self.max_linear_speed:
@@ -619,6 +641,13 @@ class CameraStraightDrive(Node):
             raise ValueError('station waypoint displacement must be nonzero')
         if self.station_target_forward < 0.0 or self.station_target_right < 0.0:
             raise ValueError('station forward/right distances must be nonnegative')
+        if self.next_stop_wait_sec < 0.0:
+            raise ValueError('next_stop_wait_sec must be nonnegative')
+        if (self.next_stop2_target_forward < 0.0
+                or self.next_stop2_target_right < 0.0
+                or math.hypot(self.next_stop2_target_forward,
+                              self.next_stop2_target_right) <= 0.0):
+            raise ValueError('next stop 2 forward/right must be nonnegative, nonzero')
         if (self.next_stop_target_forward < 0.0
                 or self.next_stop_target_right < 0.0):
             raise ValueError('next stop forward/right distances must be nonnegative')
@@ -901,6 +930,7 @@ class CameraStraightDrive(Node):
             DriveState.STATION_FINAL_APPROACH,
             DriveState.STATION_LOAD_WAIT,
             DriveState.STATION_TO_NEXT_STOP,
+            DriveState.NEXT_STOP_WAIT,
         )
         if not self.enabled and not (self.sequence_active and sequence_state):
             return
@@ -936,6 +966,8 @@ class CameraStraightDrive(Node):
             self._control_station_load_wait(now)
         elif self.state == DriveState.STATION_TO_NEXT_STOP:
             self._control_curve(now)
+        elif self.state == DriveState.NEXT_STOP_WAIT:
+            self._control_next_stop_wait(now)
 
     def _control_camera_drive(self, now):
         if self._is_stale(now, self.last_frame_time, self.frame_timeout):
@@ -1488,34 +1520,47 @@ class CameraStraightDrive(Node):
         self._start_next_stop_from_station(now)
 
     def _start_next_stop_from_station(self, now):
+        self.next_stop_leg = 1
+        self._start_next_stop_leg(now)
+
+    def _next_stop_leg_params(self):
+        """(forward, right, yaw_relative, start_handle, end_handle) of the leg."""
+        if self.next_stop_leg == 1:
+            return (self.next_stop_target_forward, self.next_stop_target_right,
+                    self.next_stop_target_yaw_relative,
+                    self.next_stop_start_handle, self.next_stop_end_handle)
+        return (self.next_stop2_target_forward, self.next_stop2_target_right,
+                self.next_stop2_target_yaw_relative,
+                self.next_stop2_start_handle, self.next_stop2_end_handle)
+
+    def _start_next_stop_leg(self, now):
+        forward, right, yaw_relative, start_handle, end_handle = (
+            self._next_stop_leg_params())
         self.station_start_x = self.current_x
         self.station_start_y = self.current_y
         self.station_start_yaw = self.current_yaw
         cosine = math.cos(self.station_start_yaw)
         sine = math.sin(self.station_start_yaw)
-        local_y = -self.next_stop_target_right
+        local_y = -right
         self.next_stop_target_x = (
             self.station_start_x
-            + cosine * self.next_stop_target_forward
+            + cosine * forward
             - sine * local_y
         )
         self.next_stop_target_y = (
             self.station_start_y
-            + sine * self.next_stop_target_forward
+            + sine * forward
             + cosine * local_y
         )
         self.next_stop_target_yaw = self._normalize_angle(
-            self.station_start_yaw + self.next_stop_target_yaw_relative)
+            self.station_start_yaw + yaw_relative)
         self.curve_start_x = self.station_start_x
         self.curve_start_y = self.station_start_y
         self.curve_start_yaw = self.station_start_yaw
         self.curve_target_x = self.next_stop_target_x
         self.curve_target_y = self.next_stop_target_y
         self.curve_target_yaw = self.next_stop_target_yaw
-        self._build_bezier_trajectory(
-            self.next_stop_start_handle,
-            self.next_stop_end_handle,
-        )
+        self._build_bezier_trajectory(start_handle, end_handle)
         self.curve_progress_index = 0
         self.curve_distance = 0.0
         self.curve_started_at = now
@@ -1527,21 +1572,17 @@ class CameraStraightDrive(Node):
             self.curve_target_yaw - self.current_yaw)
         self.state = DriveState.STATION_TO_NEXT_STOP
         self._publish_media(self.display_mode_pub, 'IMAGE')
+        label = (
+            'STATION departure started'
+            if self.next_stop_leg == 1 else '⑩ second curve started')
         self.get_logger().warning(
-            'STATION departure started: saved actual STATION odom pose; '
+            f'{label}: saved actual odom pose; '
             f'target=({self.curve_target_x:.3f}, '
             f'{self.curve_target_y:.3f}, '
             f'{math.degrees(self.curve_target_yaw):.1f}deg)')
 
     def _finish_next_stop(self, path_complete=False):
-        self.enabled = False
-        self.sequence_active = False
-        self.command_active = False
-        self.last_linear_command = 0.0
-        self.steering_command = 0.0
-        self.state = DriveState.FINAL_REACHED
-        self._publish_stop(repeat=5)
-        self._publish_media(self.music_pub, 'STOP')
+        forward, right, yaw_relative, _, _ = self._next_stop_leg_params()
         suffix = (
             'Bezier path complete'
             if path_complete else 'pose tolerance satisfied'
@@ -1552,15 +1593,46 @@ class CameraStraightDrive(Node):
         )
         yaw_error = self._normalize_angle(
             self.next_stop_target_yaw - self.current_yaw)
-        self.get_logger().warning(
-            f'FINAL_REACHED: {suffix}; '
-            f'⑨ distance={self.curve_distance:.3f}m, '
+        leg_name = '⑨' if self.next_stop_leg == 1 else '⑩'
+        result = (
+            f'{suffix}; '
+            f'{leg_name} distance={self.curve_distance:.3f}m, '
             f'position_error={position_error:.3f}m, '
             f'yaw_error={math.degrees(yaw_error):.1f}deg; '
-            f'target forward={self.next_stop_target_forward:.2f}m, '
-            f'right={self.next_stop_target_right:.2f}m, '
-            f'yaw={math.degrees(self.next_stop_target_yaw_relative):.0f}deg; '
-            'STOPPING')
+            f'target forward={forward:.2f}m, '
+            f'right={right:.2f}m, '
+            f'yaw={math.degrees(yaw_relative):.0f}deg')
+        if self.next_stop_leg == 1:
+            # Stay in the sequence: stop, wait, then run ⑩.
+            self.command_active = False
+            self.last_linear_command = 0.0
+            self.steering_command = 0.0
+            self.state = DriveState.NEXT_STOP_WAIT
+            self.next_stop_wait_started_at = self.get_clock().now()
+            self._publish_stop(repeat=5)
+            self.get_logger().warning(
+                f'NEXT_STOP_WAIT: {result}; '
+                f'waiting {self.next_stop_wait_sec:.1f}s')
+            return
+        self.enabled = False
+        self.sequence_active = False
+        self.command_active = False
+        self.last_linear_command = 0.0
+        self.steering_command = 0.0
+        self.state = DriveState.FINAL_REACHED
+        self._publish_stop(repeat=5)
+        self._publish_media(self.music_pub, 'STOP')
+        self.get_logger().warning(f'FINAL_REACHED: {result}; STOPPING')
+
+    def _control_next_stop_wait(self, now):
+        self.command_active = False
+        self.last_linear_command = 0.0
+        self.steering_command = 0.0
+        self._publish_stop()
+        elapsed = (now - self.next_stop_wait_started_at).nanoseconds / 1e9
+        if elapsed >= self.next_stop_wait_sec:
+            self.next_stop_leg = 2
+            self._start_next_stop_leg(now)
 
     def _start_station_final_approach(self, now):
         self.command_active = False

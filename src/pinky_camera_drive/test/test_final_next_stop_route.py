@@ -36,6 +36,12 @@ def make_route_node():
         next_stop_target_yaw_relative=math.radians(-90.0),
         next_stop_start_handle=0.22,
         next_stop_end_handle=0.14,
+        next_stop2_target_forward=0.13,
+        next_stop2_target_right=0.13,
+        next_stop2_target_yaw_relative=math.radians(-90.0),
+        next_stop2_start_handle=0.072,
+        next_stop2_end_handle=0.072,
+        next_stop_wait_sec=3.5,
         curve_sample_count=121,
         display_mode_pub=object(),
     )
@@ -44,8 +50,10 @@ def make_route_node():
     node._publish_media = lambda *args: None
     node._normalize_angle = Drive._normalize_angle
     node._build_bezier_trajectory = Drive._build_bezier_trajectory.__get__(node)
-    node._start_next_stop_from_station = (
-        Drive._start_next_stop_from_station.__get__(node))
+    for name in ('_start_next_stop_from_station', '_start_next_stop_leg',
+                 '_next_stop_leg_params', '_finish_next_stop',
+                 '_control_next_stop_wait'):
+        setattr(node, name, getattr(Drive, name).__get__(node))
     return node
 
 
@@ -76,6 +84,48 @@ def test_next_stop_bezier_has_no_backward_or_target_overshoot():
     assert node.curve_points[:, 1].max() <= 0.0
 
 
+class Clock:
+    def __init__(self, seconds):
+        self.seconds = seconds
+
+    def now(self):
+        return self
+
+    def __sub__(self, other):
+        return types.SimpleNamespace(
+            nanoseconds=int((self.seconds - other.seconds) * 1e9))
+
+
+def test_ninth_stop_waits_then_runs_second_curve_from_actual_pose():
+    node = make_route_node()
+    node.current_x = node.current_y = node.current_yaw = 0.0
+    node.enabled = node.sequence_active = True
+    node.stops = []
+    node._publish_stop = lambda repeat=1: node.stops.append(repeat)
+    clock = Clock(10.0)
+    node.get_clock = lambda: clock
+    node._start_next_stop_from_station(clock)
+    node.curve_distance = 0.4
+    node.current_x, node.current_y = 0.29, -0.29
+    node.current_yaw = math.radians(-90.0)
+    node._finish_next_stop()
+    assert node.state == drive.DriveState.NEXT_STOP_WAIT
+    assert node.enabled and node.sequence_active
+    assert node.stops == [5]
+
+    node._control_next_stop_wait(Clock(13.4))
+    assert node.state == drive.DriveState.NEXT_STOP_WAIT
+    node._control_next_stop_wait(Clock(13.5))
+    assert node.state == drive.DriveState.STATION_TO_NEXT_STOP
+    assert node.next_stop_leg == 2
+    # Facing -90deg: forward 0.13 is -y, right 0.13 is -x.
+    assert node.next_stop_target_x == pytest.approx(0.29 - 0.13)
+    assert node.next_stop_target_y == pytest.approx(-0.29 - 0.13)
+    assert abs(node.next_stop_target_yaw) == pytest.approx(math.pi)
+    assert node.curve_points[:, 0].min() >= 0.16 - 1e-9
+    assert node.curve_points[:, 1].min() >= -0.42 - 1e-9
+
+
 def test_finish_next_stop_goes_directly_to_final_reached_and_stops_five_times(
 ):
     node = types.SimpleNamespace(
@@ -94,6 +144,12 @@ def test_finish_next_stop_goes_directly_to_final_reached_and_stops_five_times(
         next_stop_target_forward=0.29,
         next_stop_target_right=0.29,
         next_stop_target_yaw_relative=math.radians(-90.0),
+        next_stop2_target_forward=0.13,
+        next_stop2_target_right=0.13,
+        next_stop2_target_yaw_relative=math.radians(-90.0),
+        next_stop2_start_handle=0.072,
+        next_stop2_end_handle=0.072,
+        next_stop_leg=2,
         music_pub=object(),
         stops=[],
         media=[],
@@ -103,13 +159,14 @@ def test_finish_next_stop_goes_directly_to_final_reached_and_stops_five_times(
     node._publish_stop = lambda repeat=1: node.stops.append(repeat)
     node._publish_media = lambda publisher, text: node.media.append(text)
     node._normalize_angle = Drive._normalize_angle
+    node._next_stop_leg_params = Drive._next_stop_leg_params.__get__(node)
     Drive._finish_next_stop(node)
     assert node.state == drive.DriveState.FINAL_REACHED
     assert not node.enabled and not node.sequence_active and not node.command_active
     assert node.last_linear_command == 0.0 and node.steering_command == 0.0
     assert node.stops == [5]
     assert node.media == ['STOP']
-    assert 'forward=0.29m, right=0.29m, yaw=-90deg' in node.log.lines[-1]
+    assert 'forward=0.13m, right=0.13m, yaw=-90deg' in node.log.lines[-1]
 
 
 def test_yaml_has_final_route_target_and_camera_speed():
