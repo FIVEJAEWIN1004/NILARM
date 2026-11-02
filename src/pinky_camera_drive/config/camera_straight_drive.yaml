@@ -76,7 +76,7 @@ camera_straight_drive:
     manual_station_departure: true
     use_harvest_action: true
     harvest_target_count: 1
-    next_stop_target_forward_m: 0.28
+    next_stop_target_forward_m: 0.29
     next_stop_target_right_m: 0.29
     next_stop_target_yaw_deg: -90.0
     next_stop_linear_speed: 0.10
