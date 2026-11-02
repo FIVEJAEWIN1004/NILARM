@@ -165,11 +165,11 @@ class CameraStraightDrive(Node):
         self.declare_parameter('next_stop2_end_handle_m', 0.094)
         # ⑪: after ⑩, follow the left yellow line like ① for this distance.
         self.declare_parameter('final_camera_distance_m', 0.45)
-        self.declare_parameter('final_camera_linear_speed', 0.15)
+        self.declare_parameter('final_camera_linear_speed', 0.20)
         self.declare_parameter('final_camera_detect_timeout_sec', 1.0)
         # ⑫: after ⑪, odom straight (heading held) for this distance, then stop.
         self.declare_parameter('final_straight_distance_m', 0.45)
-        self.declare_parameter('final_straight_linear_speed', 0.15)
+        self.declare_parameter('final_straight_linear_speed', 0.20)
         self.declare_parameter('final_straight_timeout_sec', 8.0)
         self.declare_parameter('target_x', 320.0)
         self.declare_parameter('boundary_reference_x', 23.0)
