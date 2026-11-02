@@ -47,27 +47,39 @@ LAST_PUMPKIN_FOLD_MIN_DURATION_SEC = 1.5
 LAST_PUMPKIN_CENTER_RETURN_DURATION_SEC = 1.7
 LAST_PUMPKIN_CENTER_SETTLE_SEC = 0.5
 PARK_MIN_DURATION_SEC = 1.5
+LAST_PUMPKIN_CLEANUP_SPEEDUP = 3.0
+DIRECT_LAST_FOLD_TO_PARK = True
+DIRECT_LAST_HOVER_TO_PARK = True
 BIN_FOLD_DURATION_SEC = 8.0 * TRANSIT_DURATION_FACTOR
 NEXT_TARGET_GRIPPER_RESTORE_DURATION_SEC = 3.0 / 1.6
 NEXT_TARGET_FOLD_SPEEDUP = 1.6
 BIN_SETTLE_SEC = 0.7
+BIN_RELEASE_GRIPPER_SPEEDUP = 1.5
+BIN_RELEASE_GRIPPER_DURATION_SEC = (
+    scan.grasp.GRIPPER_OPEN_DURATION_SEC / BIN_RELEASE_GRIPPER_SPEEDUP
+)
 DIRECT_NEXT_TARGET_FROM_BIN_HOVER = True
 # ㉔ Pinky departs as soon as the LAST pumpkin's open gripper has risen to the
 # bin hover pose and settled (⑲ + BIN_SETTLE_SEC): v5 sends one Action
 # feedback status="departure_ready"; ㉑/㉒ continue while Pinky drives. Same
 # name/meaning on Pinky (pinky_camera_drive.camera_straight_drive). False =
 # Pinky departs on the final /harvest result as before.
-ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE = True
-DIRECT_HOVER_BYPASS_APPROACH_DELTA_GUARD = True
+ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE = False
+DIRECT_HOVER_BYPASS_APPROACH_DELTA_GUARD = False
 
 # Pure pre-planning is enabled; feedback/collision-dependent experiments stay
 # opt-in until they are verified on the real arm and camera.
 ENABLE_ADAPTIVE_ARM_SETTLE = False
-ENABLE_PRECOMPUTED_HARVEST_PLANS = True
-ENABLE_JOINT_COST_TARGET_ORDER = True
+ENABLE_PRECOMPUTED_HARVEST_PLANS = False
+ENABLE_JOINT_COST_TARGET_ORDER = False
 ENABLE_ADAPTIVE_SCAN_SETTLE = False
 ENABLE_ADAPTIVE_SCAN_EARLY_EXIT = False
 ENABLE_CONTINUOUS_SAFE_APPROACH = False
+ENABLE_DIRECT_FINAL_APPROACH = True
+ENABLE_SKIP_HIGH_APPROACH = True
+ENABLE_CONTINUOUS_HELD_TRANSPORT = False
+ENABLE_CONTINUOUS_APPROACH_TO_GRASP = False
+ENABLE_DIRECT_LIFT_TO_ESCAPE = True
 
 ARM_SETTLE_MIN_SEC = 0.10
 ARM_SETTLE_STABLE_WINDOW_SEC = 0.15
@@ -76,11 +88,18 @@ ARM_SETTLE_VELOCITY_TOLERANCE_DPS = 0.5
 
 _ORIGINAL_MOVEMENT_DURATION = scan.multi.movement_duration
 _direct_hover_pending = False
+_last_pumpkin_cleanup_completed = False
+_direct_last_park_pending = False
+_direct_last_park_duration = None
 
 
 def reset_direct_hover_state() -> None:
-    global _direct_hover_pending
+    global _direct_hover_pending, _last_pumpkin_cleanup_completed
+    global _direct_last_park_pending, _direct_last_park_duration
     _direct_hover_pending = False
+    _last_pumpkin_cleanup_completed = False
+    _direct_last_park_pending = False
+    _direct_last_park_duration = None
     v2._precomputed_harvest_plans.clear()
 
 
@@ -100,6 +119,108 @@ def should_bypass_direct_hover_approach_delta_guard() -> bool:
 
 def should_use_continuous_safe_approach() -> bool:
     return bool(ENABLE_CONTINUOUS_SAFE_APPROACH)
+
+
+def should_use_direct_final_approach() -> bool:
+    return bool(ENABLE_DIRECT_FINAL_APPROACH)
+
+
+def should_skip_high_approach() -> bool:
+    return bool(ENABLE_SKIP_HIGH_APPROACH)
+
+
+def should_use_continuous_approach_to_grasp() -> bool:
+    return bool(ENABLE_CONTINUOUS_APPROACH_TO_GRASP)
+
+
+def should_use_direct_lift_to_escape() -> bool:
+    return bool(ENABLE_DIRECT_LIFT_TO_ESCAPE)
+
+
+def last_cleanup_duration_3x(
+    start_joints,
+    target_joints,
+    *,
+    current_duration: float,
+    minimum_duration: float = 0.0,
+) -> float:
+    """Shorten only a last-pumpkin cleanup move within quintic limits."""
+    delta_deg = float(np.max(np.abs(np.degrees(
+        np.asarray(target_joints, dtype=float)
+        - np.asarray(start_joints, dtype=float)
+    ))))
+    velocity_floor = (
+        delta_deg * v2.QUINTIC_PEAK_VELOCITY_FACTOR
+        / v2.SERVO_PROFILE_VELOCITY_DPS
+    )
+    acceleration_floor = np.sqrt(
+        v2.QUINTIC_PEAK_ACCELERATION_FACTOR * delta_deg
+        / v2.SERVO_PROFILE_ACCELERATION_DPS2
+    )
+    return max(
+        float(current_duration) / LAST_PUMPKIN_CLEANUP_SPEEDUP,
+        velocity_floor,
+        acceleration_floor,
+        float(minimum_duration),
+    )
+
+
+def plan_direct_last_fold_to_park(arm) -> tuple[np.ndarray, float]:
+    """Validate direct folded -> PARK from feedback before skipping centre."""
+    actual_fold = v2.checked_vector(
+        arm.joints(), 5, "마지막 접힘 실제 관절"
+    )
+    park_target = v2.checked_vector(
+        scan.omx_robot.FOLDED, 5, "PARK 목표 관절"
+    )
+    park_target = arm.check_limits(park_target, actual_fold)
+    duration = last_cleanup_duration_3x(
+        actual_fold,
+        park_target,
+        current_duration=v2.duration_for_target_joint_speed(
+            actual_fold,
+            park_target,
+            min_duration=PARK_MIN_DURATION_SEC,
+        ),
+        minimum_duration=PARK_MIN_DURATION_SEC,
+    )
+    v2.joint_trajectory.plan(
+        actual_fold,
+        [park_target],
+        [duration],
+        [],
+        float(getattr(arm, "hz", 100.0)),
+    )
+    return actual_fold, duration
+
+
+def plan_direct_last_hover_to_park(arm) -> tuple[np.ndarray, float]:
+    """Validate bin-hover -> PARK from feedback before skipping the fold."""
+    actual_hover = v2.checked_vector(
+        arm.joints(), 5, "마지막 적재함 상공 실제 관절"
+    )
+    park_target = v2.checked_vector(
+        scan.omx_robot.FOLDED, 5, "PARK 목표 관절"
+    )
+    park_target = arm.check_limits(park_target, actual_hover)
+    duration = last_cleanup_duration_3x(
+        actual_hover,
+        park_target,
+        current_duration=v2.duration_for_target_joint_speed(
+            actual_hover,
+            park_target,
+            min_duration=PARK_MIN_DURATION_SEC,
+        ),
+        minimum_duration=PARK_MIN_DURATION_SEC,
+    )
+    v2.joint_trajectory.plan(
+        actual_hover,
+        [park_target],
+        [duration],
+        [],
+        float(getattr(arm, "hz", 100.0)),
+    )
+    return actual_hover, duration
 
 
 def settle_after_arm_move(
@@ -163,7 +284,9 @@ def prepare_optimized_harvest_targets(
         arm,
         calibration,
         distance_order,
-        bypass_high_delta_guard=DIRECT_NEXT_TARGET_FROM_BIN_HOVER,
+        bypass_high_delta_guard=(
+            should_bypass_direct_hover_approach_delta_guard()
+        ),
     )
     v2._precomputed_harvest_plans = {
         id(plan.cluster): plan for plan in plans
@@ -342,17 +465,40 @@ def configure_selective_speed() -> None:
     v2.continuous_safe_approach_enabled = (
         should_use_continuous_safe_approach
     )
+    v2.direct_final_approach_enabled = should_use_direct_final_approach
+    v2.skip_high_approach_enabled = should_skip_high_approach
+    v2.continuous_approach_to_grasp_enabled = (
+        should_use_continuous_approach_to_grasp
+    )
+    v2.direct_lift_to_escape_enabled = should_use_direct_lift_to_escape
 
 
 def park_at_target_speed(arm) -> None:
     """㉒: omx_f park() order (gripper, then FOLDED); only the fold is timed."""
-    arm.park(
-        duration=v2.duration_for_target_joint_speed(
-            arm.joints(),
-            scan.omx_robot.FOLDED,
-            min_duration=PARK_MIN_DURATION_SEC,
-        )
+    global _last_pumpkin_cleanup_completed
+    global _direct_last_park_pending, _direct_last_park_duration
+    current_joints = np.asarray(arm.joints(), dtype=float)
+    current_duration = v2.duration_for_target_joint_speed(
+        current_joints,
+        scan.omx_robot.FOLDED,
+        min_duration=PARK_MIN_DURATION_SEC,
     )
+    duration = current_duration
+    if _direct_last_park_pending:
+        duration = float(_direct_last_park_duration)
+    elif _last_pumpkin_cleanup_completed:
+        duration = last_cleanup_duration_3x(
+            current_joints,
+            scan.omx_robot.FOLDED,
+            current_duration=current_duration,
+            minimum_duration=PARK_MIN_DURATION_SEC,
+        )
+    try:
+        arm.park(duration=duration)
+    finally:
+        _last_pumpkin_cleanup_completed = False
+        _direct_last_park_pending = False
+        _direct_last_park_duration = None
 
 
 def deposit_open_then_rise(
@@ -361,6 +507,8 @@ def deposit_open_then_rise(
     default_gripper_value: float,
     is_last: bool,
 ) -> None:
+    global _last_pumpkin_cleanup_completed
+    global _direct_last_park_pending, _direct_last_park_duration
     if (
         v2._BIN_HOVER_JOINTS is None
         or v2._BIN_DROP_JOINTS is None
@@ -376,13 +524,22 @@ def deposit_open_then_rise(
     )
 
     print("[적재] 호박을 든 채 적재함 상공으로 이동합니다.")
-    arm.move_joints(
-        v2._BIN_HOVER_JOINTS,
-        duration=v2.duration_with_safe_speedup(
+    current_hover_duration = max(
+        BIN_HOVER_MIN_DURATION_SEC,
+        v2.duration_with_safe_speedup(
             v2._BIN_FOLDED_JOINTS,
             v2._BIN_HOVER_JOINTS,
             min_duration=BIN_HOVER_MIN_DURATION_SEC,
             speedup=v2.HELD_BIN_MOVE_SPEEDUP,
+        ),
+    )
+    arm.move_joints(
+        v2._BIN_HOVER_JOINTS,
+        duration=v2.held_segment_duration_2x(
+            v2._BIN_FOLDED_JOINTS,
+            v2._BIN_HOVER_JOINTS,
+            current_duration=current_hover_duration,
+            minimum_duration=BIN_HOVER_MIN_DURATION_SEC,
         ),
     )
     settle_after_arm_move(arm, v2._BIN_HOVER_JOINTS, BIN_SETTLE_SEC)
@@ -401,7 +558,7 @@ def deposit_open_then_rise(
     print("[적재] 그리퍼를 열어 주황 호박을 놓습니다.")
     arm.gripper(
         default_gripper_value,
-        duration=scan.grasp.GRIPPER_OPEN_DURATION_SEC,
+        duration=BIN_RELEASE_GRIPPER_DURATION_SEC,
         stall_guard=True,
         wait=True,
     )
@@ -447,6 +604,7 @@ def deposit_open_then_rise(
         default_gripper_value,
         duration=(
             LAST_PUMPKIN_GRIPPER_RESTORE_DURATION_SEC
+            / LAST_PUMPKIN_CLEANUP_SPEEDUP
             if is_last
             else NEXT_TARGET_GRIPPER_RESTORE_DURATION_SEC
         ),
@@ -454,36 +612,96 @@ def deposit_open_then_rise(
         wait=True,
     )
 
-    print("[다음 목표 준비] 적재함 방향에서 팔을 접습니다. (1.5배)")
-    arm.move_joints(
-        v2._BIN_FOLDED_JOINTS,
-        duration=(
-            v2.duration_for_target_joint_speed(
-                v2._BIN_HOVER_JOINTS,
-                v2._BIN_FOLDED_JOINTS,
-                min_duration=LAST_PUMPKIN_FOLD_MIN_DURATION_SEC,
+    use_direct_hover_park = False
+    if is_last and DIRECT_LAST_HOVER_TO_PARK:
+        try:
+            actual_hover, direct_duration = plan_direct_last_hover_to_park(
+                arm
             )
-            if is_last
-            else v2.duration_with_safe_speedup(
-                v2._BIN_HOVER_JOINTS,
-                v2._BIN_FOLDED_JOINTS,
-                min_duration=BIN_FOLD_DURATION_SEC,
-                speedup=NEXT_TARGET_FOLD_SPEEDUP,
+            max_delta = float(np.max(np.abs(np.degrees(
+                scan.omx_robot.FOLDED - actual_hover
+            ))))
+            print(
+                "[마지막 정리 직행] 적재함 상공에서 접힘 자세를 "
+                f"생략하고 PARK로 이동합니다. 최대 변화 "
+                f"{max_delta:.1f}도 / duration {direct_duration:.2f}초"
             )
-        ),
-    )
+            _direct_last_park_pending = True
+            _direct_last_park_duration = direct_duration
+            use_direct_hover_park = True
+        except (AttributeError, TypeError, ValueError, RuntimeError) as error:
+            print(
+                f"[마지막 정리 hover fallback] {error}; 기존 접힘 "
+                "경로를 사용합니다."
+            )
+
+    if not use_direct_hover_park:
+        print("[다음 목표 준비] 적재함 방향에서 팔을 접습니다. (1.5배)")
+        last_fold_current_duration = v2.duration_for_target_joint_speed(
+            v2._BIN_HOVER_JOINTS,
+            v2._BIN_FOLDED_JOINTS,
+            min_duration=LAST_PUMPKIN_FOLD_MIN_DURATION_SEC,
+        )
+        arm.move_joints(
+            v2._BIN_FOLDED_JOINTS,
+            duration=(
+                last_cleanup_duration_3x(
+                    v2._BIN_HOVER_JOINTS,
+                    v2._BIN_FOLDED_JOINTS,
+                    current_duration=last_fold_current_duration,
+                    minimum_duration=LAST_PUMPKIN_FOLD_MIN_DURATION_SEC,
+                )
+                if is_last
+                else v2.duration_with_safe_speedup(
+                    v2._BIN_HOVER_JOINTS,
+                    v2._BIN_FOLDED_JOINTS,
+                    min_duration=BIN_FOLD_DURATION_SEC,
+                    speedup=NEXT_TARGET_FOLD_SPEEDUP,
+                )
+            ),
+        )
 
     if is_last:
-        print("[수확 완료] 마지막 과실이므로 중앙 안전 자세로 복귀합니다.")
-        arm.move_joints(
-            calibration["camera_joints"],
-            duration=LAST_PUMPKIN_CENTER_RETURN_DURATION_SEC,
-        )
-        settle_after_arm_move(
-            arm,
-            calibration["camera_joints"],
-            LAST_PUMPKIN_CENTER_SETTLE_SEC,
-        )
+        center_joints = np.asarray(calibration["camera_joints"], dtype=float)
+        use_direct_park = use_direct_hover_park
+        if not use_direct_park and DIRECT_LAST_FOLD_TO_PARK:
+            try:
+                actual_fold, direct_duration = plan_direct_last_fold_to_park(
+                    arm
+                )
+                max_delta = float(np.max(np.abs(np.degrees(
+                    scan.omx_robot.FOLDED - actual_fold
+                ))))
+                print(
+                    "[마지막 정리 직행] 중앙 안전 자세를 생략하고 "
+                    f"접힘 자세에서 PARK로 이동합니다. 최대 변화 "
+                    f"{max_delta:.1f}도 / duration {direct_duration:.2f}초"
+                )
+                _direct_last_park_pending = True
+                _direct_last_park_duration = direct_duration
+                use_direct_park = True
+            except (AttributeError, TypeError, ValueError, RuntimeError) as error:
+                print(
+                    f"[마지막 정리 fallback] {error}; 기존 중앙 안전 "
+                    "자세를 거쳐 PARK합니다."
+                )
+
+        if not use_direct_park:
+            print("[수확 완료] 마지막 과실이므로 중앙 안전 자세로 복귀합니다.")
+            arm.move_joints(
+                center_joints,
+                duration=last_cleanup_duration_3x(
+                    v2._BIN_FOLDED_JOINTS,
+                    center_joints,
+                    current_duration=LAST_PUMPKIN_CENTER_RETURN_DURATION_SEC,
+                ),
+            )
+            settle_after_arm_move(
+                arm,
+                calibration["camera_joints"],
+                LAST_PUMPKIN_CENTER_SETTLE_SEC,
+            )
+        _last_pumpkin_cleanup_completed = True
     else:
         print("[다음 목표 준비] 중앙 자세를 거치지 않고 다음 과실로 진행합니다.")
 

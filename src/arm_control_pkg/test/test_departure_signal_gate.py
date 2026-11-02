@@ -37,6 +37,7 @@ class RecordingArm:
 
 
 def install_poses(monkeypatch):
+    monkeypatch.setattr(deposit, "DIRECT_LAST_HOVER_TO_PARK", False)
     monkeypatch.setattr(poses, "_BIN_HOVER_JOINTS", np.full(5, 1.0))
     monkeypatch.setattr(poses, "_BIN_DROP_JOINTS", np.full(5, 2.0))
     monkeypatch.setattr(poses, "_BIN_FOLDED_JOINTS", np.full(5, 3.0))
@@ -260,9 +261,20 @@ def test_manual_departure_gate_is_opt_in_only(monkeypatch):
 FOUR = [(0.10, 0.10), (0.20, 0.10), (0.10, -0.20), (0.25, -0.20)]
 
 
-def run_recorded(monkeypatch, pumpkins=FOUR, cancel=lambda: False, **kwargs):
+def run_recorded(
+    monkeypatch,
+    pumpkins=FOUR,
+    cancel=lambda: False,
+    departure_enabled=True,
+    **kwargs,
+):
     """Real v5 run; arm events, sleeps and feedback in one ordered list."""
     events = []
+    monkeypatch.setattr(
+        deposit,
+        "ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE",
+        departure_enabled,
+    )
     install_fake_hardware(monkeypatch, events, pumpkins)
     no_stdin(monkeypatch)
     monkeypatch.setattr(scan.time, "sleep",
@@ -296,9 +308,10 @@ def test_departure_ready_once_after_last_rise_and_settle(monkeypatch):
     assert events[at - 3][1] == events[at - 1][1] == deposit.BIN_SETTLE_SEC
     # Pumpkins 1-3 were all released before, without any departure_ready.
     assert [e[0] for e in events[:at]].count("open") == 4
-    # ㉑ gripper restore / fold / centre return and ㉒ park still run after.
+    # ㉑ gripper restore/fold and direct ㉒ park still run after; result
+    # feedback remains between the completed arm stages and PARK cleanup.
     after = [e[0] for e in events[at + 1:]]
-    assert after == ["restore_gripper", "move", "move", "sleep", "fb", "fb", "park"]
+    assert after == ["restore_gripper", "move", "fb", "fb", "park"]
     assert ("fb", 4, "completed") in events[at + 1:]
     assert events.index(("fb", 4, "placing")) > at  # counted after ⑲
 
@@ -309,8 +322,7 @@ def test_single_pumpkin_is_also_last(monkeypatch):
 
 
 def test_flag_off_keeps_result_based_departure(monkeypatch):
-    monkeypatch.setattr(deposit, "ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE", False)
-    events, result = run_recorded(monkeypatch)
+    events, result = run_recorded(monkeypatch, departure_enabled=False)
     assert departures(events) == [] and result.harvested_count == 4
     assert ("fb", 4, "completed") in events
 
@@ -397,6 +409,9 @@ def test_manual_gate_signals_once_after_enter(monkeypatch):
     events = []
     install_fake_hardware(monkeypatch, events, FOUR)
     monkeypatch.setattr(sys, "stdin", io.StringIO("\n"))
+    monkeypatch.setattr(
+        deposit, "ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE", True
+    )
     feedback = []
     result = v5.run_harvest(
         require_departure_confirmation=True,

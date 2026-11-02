@@ -41,7 +41,12 @@ class ApproachArm:
         return self.start
 
     def move_joints(self, joints, duration):
-        self.moves.append((np.asarray(joints, dtype=float), float(duration)))
+        target = np.asarray(joints, dtype=float)
+        self.moves.append((target, float(duration)))
+        self.start = target.copy()
+
+    def check_limits(self, target, _start):
+        return np.asarray(target, dtype=float)
 
     def close_gripper(self, **_kwargs):
         self.close_calls.append(_kwargs)
@@ -79,7 +84,7 @@ def test_safe_approach_target_speed_and_floors():
     assert harvest.TARGET_AVERAGE_JOINT_SPEED_DPS * 1.875 <= 41.2
     assert harvest.SAFE_APPROACH_PREALIGN_MIN_DURATION_SEC == pytest.approx(1.2)
     assert harvest.SAFE_APPROACH_HIGH_MIN_DURATION_SEC == pytest.approx(1.4)
-    assert harvest.SAFE_APPROACH_SPEEDUP == pytest.approx(1.3)
+    assert harvest.SAFE_APPROACH_SPEEDUP == pytest.approx(2.0)
 
 
 @pytest.mark.parametrize(
@@ -90,8 +95,7 @@ def test_safe_approach_target_speed_and_floors():
         (
             -23.55,
             0.55,
-            24.1 * harvest.QUINTIC_PEAK_VELOCITY_FACTOR
-            / harvest.SERVO_PROFILE_VELOCITY_DPS,
+            harvest.SAFE_APPROACH_PREALIGN_MIN_DURATION_SEC,
         ),
     ],
 )
@@ -120,11 +124,11 @@ def test_prealign_uses_joint1_change_from_actual_start(
     for (target, _duration), expected in zip(moves[2:], expected_stages):
         np.testing.assert_array_equal(target, expected)
     assert arm.close_calls == [{
-        "duration": harvest.scan.grasp.GRIPPER_CLOSE_DURATION_SEC,
+        "duration": harvest.GRIPPER_CLOSE_DURATION_SEC,
         "stall_guard": True,
         "wait": True,
     }]
-    assert harvest.scan.grasp.GRIPPER_CLOSE_DURATION_SEC == pytest.approx(4.0)
+    assert harvest.GRIPPER_CLOSE_DURATION_SEC == pytest.approx(2.0)
 
 
 def test_short_high_approach_keeps_floor(monkeypatch):
@@ -133,7 +137,183 @@ def test_short_high_approach_keeps_floor(monkeypatch):
 
     moves = run_safe_approach(monkeypatch, folded, folded, high).moves
 
-    assert moves[1][1] == pytest.approx(1.4 / 1.3)
+    assert moves[1][1] == pytest.approx(1.4)
+
+
+def test_direct_final_approach_uses_actual_plus80_feedback(monkeypatch):
+    start = deg_joints(0, -50, 30, 70, -10)
+    prealign = deg_joints(-80, -50, 30, 70, -10)
+    high = deg_joints(-80, -20, 25, 50, -5)
+    captured = {}
+    original = harvest.direct_final_approach_duration
+
+    monkeypatch.setattr(harvest, "direct_final_approach_enabled", lambda: True)
+
+    def capture_duration(actual_start, target):
+        captured["start"] = np.asarray(actual_start, dtype=float).copy()
+        captured["target"] = np.asarray(target, dtype=float).copy()
+        return original(actual_start, target)
+
+    monkeypatch.setattr(harvest, "direct_final_approach_duration", capture_duration)
+    arm = run_safe_approach(monkeypatch, start, prealign, high)
+
+    # ⑫ remains current -> prealign -> +80, then ⑬ sends only final 0 mm.
+    assert len(arm.moves) == 3
+    np.testing.assert_array_equal(arm.moves[0][0], prealign)
+    np.testing.assert_array_equal(arm.moves[1][0], high)
+    np.testing.assert_array_equal(captured["start"], high)
+    np.testing.assert_array_equal(arm.moves[2][0], captured["target"])
+    assert arm.moves[2][1] == pytest.approx(3.25)
+
+
+def test_direct_final_approach_validation_failure_falls_back(monkeypatch):
+    start = deg_joints(0, -50, 30, 70, -10)
+    high = deg_joints(-80, -20, 25, 50, -5)
+    monkeypatch.setattr(harvest, "direct_final_approach_enabled", lambda: True)
+    monkeypatch.setattr(
+        harvest.joint_trajectory,
+        "plan",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            ValueError("직행 안전 검증 실패")
+        ),
+    )
+
+    moves = run_safe_approach(monkeypatch, start, start, high).moves
+
+    assert len(moves) == 5
+    assert [duration for _target, duration in moves[2:]] == pytest.approx(
+        harvest.FINAL_APPROACH_DURATIONS_SEC
+    )
+
+
+def test_direct_final_approach_duration_obeys_quintic_limits():
+    high = deg_joints(-80, -20, 25, 50, -5)
+    grasp = high + deg_joints(0, 31.0, 13.0, -31.0, 5.0)
+    duration = harvest.direct_final_approach_duration(high, grasp)
+    max_delta = float(np.max(np.abs(np.degrees(grasp - high))))
+
+    assert duration == pytest.approx(3.25)
+    assert (
+        max_delta * harvest.QUINTIC_PEAK_VELOCITY_FACTOR / duration
+        <= harvest.SERVO_PROFILE_VELOCITY_DPS
+    )
+    assert (
+        max_delta * harvest.QUINTIC_PEAK_ACCELERATION_FACTOR / duration**2
+        <= harvest.SERVO_PROFILE_ACCELERATION_DPS2
+    )
+
+
+def test_continuous_approach_passes_high_and_stops_only_at_grasp(monkeypatch):
+    start = deg_joints(0, -50, 30, 70, -10)
+    prealign = deg_joints(-40, -50, 30, 70, -10)
+    high = deg_joints(-80, -30, 25, 55, -5)
+    captured = {}
+    monkeypatch.setattr(
+        harvest, "continuous_approach_to_grasp_enabled", lambda: True
+    )
+
+    def capture_move(_arm, segments, via_speed_caps_dps):
+        captured["segments"] = list(segments)
+        captured["caps"] = tuple(via_speed_caps_dps)
+        return 0
+
+    monkeypatch.setattr(
+        harvest.joint_trajectory, "move_joints_continuous", capture_move
+    )
+    arm = run_safe_approach(monkeypatch, start, prealign, high)
+
+    assert arm.moves == []
+    assert len(captured["segments"]) == 3
+    np.testing.assert_array_equal(captured["segments"][0][0], prealign)
+    np.testing.assert_array_equal(captured["segments"][1][0], high)
+    # +30/+10 are validated by the IK planner but are not motion targets.
+    np.testing.assert_array_equal(
+        captured["segments"][2][0], high + deg_joints(0, 3, 0, 0, 0)
+    )
+    assert captured["caps"] == pytest.approx((21.9, 21.9))
+    assert arm.close_calls == [{
+        "duration": 2.0,
+        "stall_guard": True,
+        "wait": True,
+    }]
+
+
+def test_continuous_approach_plan_failure_uses_complete_staged_path(monkeypatch):
+    start = deg_joints(0, -50, 30, 70, -10)
+    high = deg_joints(-80, -30, 25, 55, -5)
+    monkeypatch.setattr(
+        harvest, "continuous_approach_to_grasp_enabled", lambda: True
+    )
+    monkeypatch.setattr(
+        harvest,
+        "plan_continuous_approach_to_grasp",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            ValueError("연속 접근 검증 실패")
+        ),
+    )
+
+    moves = run_safe_approach(monkeypatch, start, start, high).moves
+
+    assert len(moves) == 5
+    np.testing.assert_array_equal(moves[0][0], start)
+    np.testing.assert_array_equal(moves[1][0], high)
+    assert [duration for _target, duration in moves[2:]] == pytest.approx(
+        harvest.FINAL_APPROACH_DURATIONS_SEC
+    )
+
+
+def test_continuous_approach_100hz_limits_and_high_waypoint_velocity():
+    class PlanningArm:
+        hz = 100.0
+
+        @staticmethod
+        def check_limits(target, _start):
+            return np.asarray(target, dtype=float)
+
+    start = deg_joints(0, -50, 30, 70, -10)
+    prealign = deg_joints(-40, -50, 30, 70, -10)
+    high = deg_joints(-80, -30, 25, 55, -5)
+    grasp = deg_joints(-80, -20, 25, 45, -5)
+    result = harvest.plan_continuous_approach_to_grasp(
+        PlanningArm(), start, prealign, high, grasp, (4.0, 2.0, 6.5)
+    )
+    targets = [target for target, _duration in result["segments"]]
+    durations = [duration for _target, duration in result["segments"]]
+    rounded, velocities, coefficients = harvest.joint_trajectory.plan(
+        start,
+        targets,
+        durations,
+        result["via_speed_caps_dps"],
+        100.0,
+    )
+    points = list(harvest.joint_trajectory.sample_path(
+        targets, rounded, coefficients, 100.0
+    ))
+    path_deg = np.degrees(np.asarray([start] + points))
+    speed = np.diff(path_deg, axis=0) * 100.0
+    acceleration = np.diff(speed, axis=0) * 100.0
+
+    assert result["previous_total_duration"] == pytest.approx(12.5)
+    assert result["requested_total_duration"] == pytest.approx(6.25)
+    assert result["actual_total_duration"] >= 6.25
+    assert np.any(np.abs(velocities[2]) > 0.0)  # +80 mm is passed in motion.
+    assert np.allclose(velocities[-1], 0.0)  # Full stop only at final grasp.
+    assert np.max(np.abs(speed)) <= harvest.SERVO_PROFILE_VELOCITY_DPS
+    assert np.max(np.abs(acceleration)) <= (
+        harvest.SERVO_PROFILE_ACCELERATION_DPS2
+    )
+
+
+def test_competition_enables_only_continuous_approach_experiment():
+    assert speed.ENABLE_CONTINUOUS_APPROACH_TO_GRASP
+    assert speed.ENABLE_DIRECT_LIFT_TO_ESCAPE
+    assert not speed.ENABLE_DIRECT_FINAL_APPROACH
+    assert not speed.ENABLE_CONTINUOUS_HELD_TRANSPORT
+    assert not speed.DIRECT_NEXT_TARGET_FROM_BIN_HOVER
+    assert not speed.ENABLE_PRECOMPUTED_HARVEST_PLANS
+    assert not speed.ENABLE_JOINT_COST_TARGET_ORDER
+    assert not speed.ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE
+    assert not speed.DIRECT_HOVER_BYPASS_APPROACH_DELTA_GUARD
 
 
 def test_continuous_safe_approach_keeps_both_waypoints(monkeypatch):

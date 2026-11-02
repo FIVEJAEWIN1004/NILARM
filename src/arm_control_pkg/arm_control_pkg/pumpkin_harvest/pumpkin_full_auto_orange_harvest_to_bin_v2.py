@@ -40,7 +40,7 @@ SERVO_PROFILE_VELOCITY_DPS = 41.2
 SERVO_PROFILE_ACCELERATION_DPS2 = 215.0
 QUINTIC_PEAK_VELOCITY_FACTOR = 1.875
 QUINTIC_PEAK_ACCELERATION_FACTOR = 5.7735
-SAFE_APPROACH_SPEEDUP = 1.3
+SAFE_APPROACH_SPEEDUP = 2.0
 HELD_BIN_MOVE_SPEEDUP = 1.3
 SAFE_APPROACH_PREALIGN_MIN_DURATION_SEC = 1.2
 SAFE_APPROACH_HIGH_MIN_DURATION_SEC = 1.4
@@ -49,7 +49,11 @@ LIFT_EARLY_SPEEDUP = 1.7
 LIFT_EARLY_MIN_DURATION_SEC = 0.50
 HELD_FOLD_MIN_DURATION_SEC = 1.4
 HELD_BIN_ROTATION_MIN_DURATION_SEC = 1.5
+HELD_MOVE_SPEEDUP = 2.0
 FINAL_APPROACH_DURATIONS_SEC = (2.5, 2.0, 2.0)
+DIRECT_FINAL_APPROACH_SPEEDUP = 2.0
+DIRECT_FINAL_APPROACH_MIN_DURATION_SEC = 0.5
+GRIPPER_CLOSE_DURATION_SEC = 2.0
 # The lift passes +10/+30 mm without stopping; at +80 mm only joints that
 # keep their direction into the fold continue, at no more than this speed.
 LIFT_TO_FOLD_VIA_SPEED_DPS = 5.0
@@ -73,6 +77,175 @@ def direct_hover_approach_delta_guard_bypass_enabled() -> bool:
 def continuous_safe_approach_enabled() -> bool:
     """Keep the verified stop-to-stop approach unless v4 opts in."""
     return False
+
+
+def direct_final_approach_enabled() -> bool:
+    """Keep the verified staged descent unless the competition wrapper opts in."""
+    return False
+
+
+def skip_high_approach_enabled() -> bool:
+    """Keep the +80 mm approach waypoint unless the wrapper opts in."""
+    return False
+
+
+def continuous_approach_to_grasp_enabled() -> bool:
+    """Keep the staged ⑫~⑬ path unless the competition wrapper opts in."""
+    return False
+
+
+def direct_lift_to_escape_enabled() -> bool:
+    """Keep staged ⑮ unless the competition wrapper enables direct lift."""
+    return False
+
+
+def plan_direct_lift_to_escape(arm, actual_start, joints_stages):
+    """Validate all lift IK stages, then plan grasp -> +80 mm directly."""
+    start = checked_vector(actual_start, 5, "직접 리프트 실제 시작 관절")
+    lift_targets = []
+    previous = start
+    for label, target in zip(
+        ("+10mm 리프트", "+30mm 리프트", "+80mm 리프트"),
+        (joints_stages[2], joints_stages[1], joints_stages[0]),
+    ):
+        target = checked_vector(target, 5, label)
+        previous = arm.check_limits(target, previous)
+        lift_targets.append(previous)
+
+    staged_durations = []
+    previous = start
+    for index, target in enumerate(lift_targets):
+        if index < 2:
+            current_duration = early_lift_duration(previous, target)
+            minimum_duration = LIFT_EARLY_MIN_DURATION_SEC
+        else:
+            current_duration = duration_for_target_joint_speed(
+                previous,
+                target,
+                min_duration=LIFT_STEP_MIN_DURATION_SEC,
+            )
+            minimum_duration = LIFT_STEP_MIN_DURATION_SEC
+        staged_durations.append(held_segment_duration_2x(
+            previous,
+            target,
+            current_duration=current_duration,
+            minimum_duration=minimum_duration,
+        ))
+        previous = target
+
+    final_target = lift_targets[-1]
+    delta_deg = float(np.max(np.abs(np.degrees(final_target - start))))
+    requested = sum(staged_durations) / 2.0
+    velocity_floor = (
+        delta_deg * QUINTIC_PEAK_VELOCITY_FACTOR
+        / SERVO_PROFILE_VELOCITY_DPS
+    )
+    acceleration_floor = math.sqrt(
+        QUINTIC_PEAK_ACCELERATION_FACTOR * delta_deg
+        / SERVO_PROFILE_ACCELERATION_DPS2
+    )
+    duration = max(
+        requested,
+        velocity_floor,
+        acceleration_floor,
+        LIFT_STEP_MIN_DURATION_SEC,
+    )
+    rounded, _velocities, _coefficients = joint_trajectory.plan(
+        start,
+        [final_target],
+        [duration],
+        [],
+        float(getattr(arm, "hz", 100.0)),
+    )
+    return {
+        "target": final_target,
+        "duration": rounded[0],
+        "previous_total_duration": sum(staged_durations),
+        "requested_total_duration": requested,
+    }
+
+
+def plan_continuous_approach_to_grasp(
+    arm,
+    actual_start,
+    prealign,
+    high_approach,
+    final_grasp,
+    staged_durations,
+):
+    """Plan current -> prealign -> +80 mm -> grasp at up to 2x speed."""
+    start = checked_vector(actual_start, 5, "연속 접근 시작 관절")
+    targets = []
+    previous = start
+    for label, target in (
+        ("prealign", prealign),
+        ("+80mm 접근", high_approach),
+        ("최종 파지", final_grasp),
+    ):
+        target = checked_vector(target, 5, label)
+        previous = arm.check_limits(target, previous)
+        targets.append(previous)
+
+    baseline = [float(value) for value in staged_durations]
+    previous_total = sum(baseline)
+    if previous_total <= 0.0:
+        raise ValueError("기존 단계형 접근 시간이 유효하지 않습니다.")
+    requested = [value / 2.0 for value in baseline]
+    via_caps = (
+        TARGET_AVERAGE_JOINT_SPEED_DPS,
+        TARGET_AVERAGE_JOINT_SPEED_DPS,
+    )
+    hz = float(getattr(arm, "hz", 100.0))
+
+    # The whole path is checked before the first write. Increase every segment
+    # together only when the requested 2x timing exceeds a trajectory limit.
+    scale = 1.0
+    last_error = None
+    while scale <= 8.0 + 1e-9:
+        candidate = [value * scale for value in requested]
+        try:
+            rounded, velocities, _coefficients = joint_trajectory.plan(
+                start, targets, candidate, via_caps, hz
+            )
+            if any(np.allclose(velocity, 0.0) for velocity in velocities[1:-1]):
+                raise RuntimeError(
+                    "prealign 또는 +80mm에서 전 관절이 정지하는 "
+                    "경로입니다."
+                )
+            return {
+                "segments": list(zip(targets, rounded)),
+                "via_speed_caps_dps": via_caps,
+                "previous_total_duration": previous_total,
+                "requested_total_duration": previous_total / 2.0,
+                "actual_total_duration": sum(rounded),
+            }
+        except ValueError as error:
+            last_error = error
+            scale += 0.02
+    raise ValueError(f"안전한 연속 접근 시간을 찾지 못했습니다: {last_error}")
+
+
+def direct_final_approach_duration(start_joints, target_joints) -> float:
+    """Return the fastest requested direct descent within quintic limits."""
+    delta_deg = float(np.max(np.abs(np.degrees(
+        np.asarray(target_joints, dtype=float)
+        - np.asarray(start_joints, dtype=float)
+    ))))
+    requested = sum(FINAL_APPROACH_DURATIONS_SEC) / DIRECT_FINAL_APPROACH_SPEEDUP
+    velocity_floor = (
+        delta_deg * QUINTIC_PEAK_VELOCITY_FACTOR
+        / SERVO_PROFILE_VELOCITY_DPS
+    )
+    acceleration_floor = math.sqrt(
+        QUINTIC_PEAK_ACCELERATION_FACTOR * delta_deg
+        / SERVO_PROFILE_ACCELERATION_DPS2
+    )
+    return max(
+        requested,
+        velocity_floor,
+        acceleration_floor,
+        DIRECT_FINAL_APPROACH_MIN_DURATION_SEC,
+    )
 
 
 @dataclass
@@ -211,6 +384,34 @@ def early_lift_duration(start_joints, target_joints) -> float:
             min_duration=LIFT_STEP_MIN_DURATION_SEC,
             speedup=LIFT_EARLY_SPEEDUP,
         ),
+    )
+
+
+def held_segment_duration_2x(
+    start_joints,
+    target_joints,
+    *,
+    current_duration: float,
+    minimum_duration: float,
+) -> float:
+    """Halve one ⑮/⑯ move without crossing its existing or servo floors."""
+    delta_deg = float(np.max(np.abs(np.degrees(
+        np.asarray(target_joints, dtype=float)
+        - np.asarray(start_joints, dtype=float)
+    ))))
+    velocity_floor = (
+        delta_deg * QUINTIC_PEAK_VELOCITY_FACTOR
+        / SERVO_PROFILE_VELOCITY_DPS
+    )
+    acceleration_floor = math.sqrt(
+        QUINTIC_PEAK_ACCELERATION_FACTOR * delta_deg
+        / SERVO_PROFILE_ACCELERATION_DPS2
+    )
+    return max(
+        float(current_duration) / HELD_MOVE_SPEEDUP,
+        velocity_floor,
+        acceleration_floor,
+        float(minimum_duration),
     )
 
 
@@ -366,17 +567,23 @@ def solve_harvest_approach(
             bypass_high_delta_guard=bypass_high_delta_guard,
         )
     )
-    prealign_duration = duration_with_safe_speedup(
-        current_joints,
-        prealign,
-        min_duration=SAFE_APPROACH_PREALIGN_MIN_DURATION_SEC,
-        speedup=SAFE_APPROACH_SPEEDUP,
+    prealign_duration = max(
+        SAFE_APPROACH_PREALIGN_MIN_DURATION_SEC,
+        duration_with_safe_speedup(
+            current_joints,
+            prealign,
+            min_duration=SAFE_APPROACH_PREALIGN_MIN_DURATION_SEC,
+            speedup=SAFE_APPROACH_SPEEDUP,
+        ),
     )
-    high_duration = duration_with_safe_speedup(
-        prealign,
-        joints_stages[0],
-        min_duration=SAFE_APPROACH_HIGH_MIN_DURATION_SEC,
-        speedup=SAFE_APPROACH_SPEEDUP,
+    high_duration = max(
+        SAFE_APPROACH_HIGH_MIN_DURATION_SEC,
+        duration_with_safe_speedup(
+            prealign,
+            joints_stages[0],
+            min_duration=SAFE_APPROACH_HIGH_MIN_DURATION_SEC,
+            speedup=SAFE_APPROACH_SPEEDUP,
+        ),
     )
     return (
         observation,
@@ -540,51 +747,94 @@ def move_held_pumpkin_to_bin(
     if _BIN_FOLDED_JOINTS is None:
         raise RuntimeError("적재함 운반 자세가 준비되지 않았습니다.")
 
-    # Time the first lift step from where the arm really is, as move_joints does.
+    # All lift IK stages remain validated even when only +80 mm is commanded.
     lift_path = [np.asarray(arm.joints(), dtype=float)] + [
         joints_stages[index] for index in (2, 1, 0)
     ]
-    segments = []
-    for index, (start, target) in enumerate(
-        zip(lift_path, lift_path[1:])
-    ):
-        if index < 2:
-            duration = early_lift_duration(start, target)
-        else:
-            duration = duration_for_target_joint_speed(
-                start,
-                target,
-                min_duration=LIFT_STEP_MIN_DURATION_SEC,
+    use_direct_lift = direct_lift_to_escape_enabled()
+    if use_direct_lift:
+        try:
+            direct_plan = plan_direct_lift_to_escape(
+                arm, np.asarray(arm.joints(), dtype=float), joints_stages
             )
-        segments.append((target, duration))
-    segments.append((
-        prealign_joints,
+            print(
+                "[직접 리프트] +10/+30mm 정지를 생략하고 +80mm "
+                "상공 탈출 자세로 이동합니다. "
+                f"기존 {direct_plan['previous_total_duration']:.2f}초 / "
+                f"요청 {direct_plan['requested_total_duration']:.2f}초 / "
+                f"적용 {direct_plan['duration']:.2f}초"
+            )
+            arm.move_joints(
+                direct_plan["target"], duration=direct_plan["duration"]
+            )
+        except (AttributeError, TypeError, ValueError, RuntimeError) as error:
+            print(
+                f"[직접 리프트 fallback] {error}; 기존 +10/+30/+80mm "
+                "단계형 리프트를 사용합니다."
+            )
+            use_direct_lift = False
+
+    if not use_direct_lift:
+        for index, (start, target) in enumerate(
+            zip(lift_path, lift_path[1:])
+        ):
+            if index < 2:
+                current_duration = early_lift_duration(start, target)
+                minimum_duration = LIFT_EARLY_MIN_DURATION_SEC
+            else:
+                current_duration = duration_for_target_joint_speed(
+                    start,
+                    target,
+                    min_duration=LIFT_STEP_MIN_DURATION_SEC,
+                )
+                minimum_duration = LIFT_STEP_MIN_DURATION_SEC
+            arm.move_joints(
+                target,
+                duration=held_segment_duration_2x(
+                    start,
+                    target,
+                    current_duration=current_duration,
+                    minimum_duration=minimum_duration,
+                ),
+            )
+
+    current_fold_duration = max(
+        HELD_FOLD_MIN_DURATION_SEC,
         duration_with_safe_speedup(
             joints_stages[0],
             prealign_joints,
             min_duration=HELD_FOLD_MIN_DURATION_SEC,
             speedup=HELD_BIN_MOVE_SPEEDUP,
         ),
-    ))
-    print("[운반 준비] +10/+30 mm를 멈추지 않고 지나 +80 mm까지 상승한 뒤 팔을 접습니다.")
-    joint_trajectory.move_joints_continuous(
-        arm,
-        segments,
-        via_speed_caps_dps=(
-            TARGET_AVERAGE_JOINT_SPEED_DPS,
-            TARGET_AVERAGE_JOINT_SPEED_DPS,
-            LIFT_TO_FOLD_VIA_SPEED_DPS,
+    )
+    print("[운반 준비] +10/+30/+80 mm를 순서대로 완료한 뒤 팔을 접습니다.")
+    arm.move_joints(
+        prealign_joints,
+        duration=held_segment_duration_2x(
+            joints_stages[0],
+            prealign_joints,
+            current_duration=current_fold_duration,
+            minimum_duration=HELD_FOLD_MIN_DURATION_SEC,
         ),
     )
 
     print("[운반] 중앙 기본 각도를 거치지 않고 접힌 상태로 적재함 방향에 이동합니다.")
-    arm.move_joints(
-        _BIN_FOLDED_JOINTS,
-        duration=duration_with_safe_speedup(
+    current_rotation_duration = max(
+        HELD_BIN_ROTATION_MIN_DURATION_SEC,
+        duration_with_safe_speedup(
             prealign_joints,
             _BIN_FOLDED_JOINTS,
             min_duration=HELD_BIN_ROTATION_MIN_DURATION_SEC,
             speedup=HELD_BIN_MOVE_SPEEDUP,
+        ),
+    )
+    arm.move_joints(
+        _BIN_FOLDED_JOINTS,
+        duration=held_segment_duration_2x(
+            prealign_joints,
+            _BIN_FOLDED_JOINTS,
+            current_duration=current_rotation_duration,
+            minimum_duration=HELD_BIN_ROTATION_MIN_DURATION_SEC,
         ),
     )
 
@@ -727,7 +977,52 @@ def harvest_one_direct(
             f"안전 duration {high_approach_duration:.2f}초"
         )
 
-    if continuous_safe_approach_enabled():
+    use_continuous_to_grasp = continuous_approach_to_grasp_enabled()
+    if use_continuous_to_grasp:
+        try:
+            actual_start = checked_vector(
+                arm.joints(), 5, "연속 접근 실제 시작 관절"
+            )
+            approach_plan = plan_continuous_approach_to_grasp(
+                arm,
+                actual_start,
+                prealign,
+                joints_stages[0],
+                joints_stages[3],
+                (
+                    prealign_duration,
+                    high_approach_duration,
+                    sum(FINAL_APPROACH_DURATIONS_SEC),
+                ),
+            )
+            print(
+                "[연속 파지 접근] 실제 자세→prealign→+80mm→0mm를 "
+                "하나의 검증된 궤적으로 이동합니다. "
+                f"기존 {approach_plan['previous_total_duration']:.2f}초 / "
+                f"요청 {approach_plan['requested_total_duration']:.2f}초 / "
+                f"적용 {approach_plan['actual_total_duration']:.2f}초"
+            )
+            joint_trajectory.move_joints_continuous(
+                arm,
+                approach_plan["segments"],
+                via_speed_caps_dps=approach_plan["via_speed_caps_dps"],
+            )
+            next_target_approach_completed()
+        except ValueError as error:
+            print(
+                f"[연속 파지 접근 fallback] {error}; 기존 정지형 "
+                "⑫~⑬ 접근을 사용합니다."
+            )
+            use_continuous_to_grasp = False
+
+    high_approach_was_commanded = False
+    skip_high_approach = bool(
+        not use_continuous_to_grasp
+        and not continuous_safe_approach_enabled()
+        and direct_final_approach_enabled()
+        and skip_high_approach_enabled()
+    )
+    if not use_continuous_to_grasp and continuous_safe_approach_enabled():
         try:
             joint_trajectory.move_joints_continuous(
                 arm,
@@ -739,6 +1034,7 @@ def harvest_one_direct(
             )
             next_target_approach_completed()
             print("[연속 접근] prealign과 +80mm waypoint 검증 경로를 완료했습니다.")
+            high_approach_was_commanded = True
         except ValueError as error:
             print(f"[연속 접근 fallback] {error}; 기존 정지형 접근을 사용합니다.")
             arm.move_joints(prealign, duration=prealign_duration)
@@ -747,25 +1043,72 @@ def harvest_one_direct(
                 joints_stages[0],
                 duration=high_approach_duration,
             )
-    else:
+            high_approach_was_commanded = True
+    elif not use_continuous_to_grasp:
         arm.move_joints(prealign, duration=prealign_duration)
         next_target_approach_completed()
-        arm.move_joints(
-            joints_stages[0],
-            duration=high_approach_duration,
-        )
-    for index, duration in zip(
-        (1, 2, 3),
-        FINAL_APPROACH_DURATIONS_SEC,
-    ):
-        arm.move_joints(
-            joints_stages[index],
-            duration=duration,
-        )
+        if not skip_high_approach:
+            arm.move_joints(
+                joints_stages[0],
+                duration=high_approach_duration,
+            )
+            high_approach_was_commanded = True
+    use_staged_final_approach = not use_continuous_to_grasp
+    if use_staged_final_approach and direct_final_approach_enabled():
+        try:
+            # Read feedback after the actual direct-descent start pose. The
+            # planned prealign or pre-approach pose must never seed this time.
+            direct_start = checked_vector(
+                arm.joints(), 5, "직행 하강 시작 관절"
+            )
+            direct_target = checked_vector(
+                joints_stages[3], 5, "최종 파지 관절"
+            )
+            direct_target = arm.check_limits(direct_target, direct_start)
+            direct_duration = direct_final_approach_duration(
+                direct_start, direct_target
+            )
+            # Validate the same rest-to-rest quintic used by move_joints before
+            # sending the direct command.  Intermediate IK stages were already
+            # calculated and checked by solve_harvest_approach().
+            joint_trajectory.plan(
+                direct_start,
+                [direct_target],
+                [direct_duration],
+                [],
+                float(getattr(arm, "hz", 100.0)),
+            )
+            print(
+                "[직접 접근] 실제 출발 자세에서 최종 파지 자세로 "
+                f"직접 이동합니다. duration={direct_duration:.2f}초"
+            )
+            arm.move_joints(direct_target, duration=direct_duration)
+            use_staged_final_approach = False
+        except (AttributeError, TypeError, ValueError, RuntimeError) as error:
+            print(
+                f"[직접 접근 fallback] {error}; 기존 +30/+10/0mm "
+                "단계형 접근을 사용합니다."
+            )
+            if skip_high_approach and not high_approach_was_commanded:
+                arm.move_joints(
+                    joints_stages[0],
+                    duration=high_approach_duration,
+                )
+                high_approach_was_commanded = True
+
+    if use_staged_final_approach:
+        for index, duration in zip(
+            (1, 2, 3),
+            FINAL_APPROACH_DURATIONS_SEC,
+        ):
+            arm.move_joints(
+                joints_stages[index],
+                duration=duration,
+            )
 
     print("[집기] 전류 제한을 사용해 그리퍼를 닫습니다.")
     arm.close_gripper(
-        duration=scan.grasp.GRIPPER_CLOSE_DURATION_SEC,
+        duration=GRIPPER_CLOSE_DURATION_SEC,
         stall_guard=True,
         wait=True,
     )

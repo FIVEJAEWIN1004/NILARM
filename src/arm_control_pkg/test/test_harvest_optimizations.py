@@ -229,8 +229,8 @@ def test_release_wait_stays_fixed_when_adaptive_arm_settle_enabled(monkeypatch):
 
 
 def test_optimization_defaults_keep_hardware_dependent_features_off():
-    assert speed.ENABLE_PRECOMPUTED_HARVEST_PLANS
-    assert speed.ENABLE_JOINT_COST_TARGET_ORDER
+    assert not speed.ENABLE_PRECOMPUTED_HARVEST_PLANS
+    assert not speed.ENABLE_JOINT_COST_TARGET_ORDER
     assert not speed.ENABLE_ADAPTIVE_ARM_SETTLE
     assert not speed.ENABLE_ADAPTIVE_SCAN_SETTLE
     assert not speed.ENABLE_ADAPTIVE_SCAN_EARLY_EXIT
