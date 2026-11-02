@@ -4,8 +4,8 @@ camera_straight_drive:
     cmd_vel_topic: /cmd_vel
     odom_topic: /odom
 
-    linear_speed: 0.15
-    max_linear_speed: 0.15
+    linear_speed: 0.10
+    max_linear_speed: 0.10
     max_angular_speed: 0.15
     kp: 0.002
     steering_sign: -1.0
