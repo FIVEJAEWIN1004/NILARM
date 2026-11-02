@@ -12,6 +12,7 @@ hover; the experimental non-last path can continue directly from there.
 
 from __future__ import annotations
 
+import math
 import time
 
 import numpy as np
@@ -91,6 +92,9 @@ ENABLE_CONTINUOUS_APPROACH_TO_GRASP = False
 ENABLE_DIRECT_LIFT_TO_ESCAPE = True
 # Rotate to the bin and unfold to bin hover in one move (no stop between).
 ENABLE_ROTATE_TO_HOVER = True
+# Start harvesting at the last scan view (no centre return); the first target
+# is the ripe pumpkin closest in joint1 to it, the rest stay in distance order.
+ENABLE_HARVEST_FROM_LAST_SCAN_VIEW = True
 
 ARM_SETTLE_MIN_SEC = 0.10
 ARM_SETTLE_STABLE_WINDOW_SEC = 0.15
@@ -297,6 +301,8 @@ def prepare_optimized_harvest_targets(
         clusters,
         key=lambda cluster: np.hypot(cluster.x, cluster.y),
     )
+    if ENABLE_HARVEST_FROM_LAST_SCAN_VIEW and distance_order:
+        distance_order = first_nearest_in_joint1(arm, distance_order)
     if not ENABLE_PRECOMPUTED_HARVEST_PLANS:
         return distance_order
 
@@ -333,6 +339,22 @@ def prepare_optimized_harvest_targets(
         print("[수확 순서 최적화] 예상 관절시간순을 사용합니다.")
         print(f"[수확 순서] {costs}")
     return [plan.cluster for plan in ordered]
+
+
+def first_nearest_in_joint1(arm, clusters):
+    """Move the pumpkin whose azimuth is closest to the arm's joint1 first.
+
+    atan2(y, x) tracks the IK joint1 within a few degrees, enough to pick
+    the target that needs the least rotation from the last scan view.
+    """
+    joint1 = float(np.asarray(arm.joints(), dtype=float)[0])
+
+    def rotation(cluster):
+        azimuth = math.atan2(cluster.y, cluster.x)
+        return abs(math.remainder(azimuth - joint1, math.tau))
+
+    first = min(clusters, key=rotation)
+    return [first] + [cluster for cluster in clusters if cluster is not first]
 
 
 def should_end_scan_early(
@@ -492,6 +514,7 @@ def configure_selective_speed() -> None:
     )
     v2.direct_lift_to_escape_enabled = should_use_direct_lift_to_escape
     v2.rotate_to_hover_enabled = should_rotate_to_hover
+    scan.HARVEST_FROM_LAST_SCAN_VIEW = ENABLE_HARVEST_FROM_LAST_SCAN_VIEW
 
 
 def park_at_target_speed(arm) -> None:

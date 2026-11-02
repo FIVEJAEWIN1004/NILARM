@@ -62,7 +62,7 @@ def print_competition_summary(
 
     if ripe and require_confirmation:
         input(
-            "로봇팔이 중앙 기본 자세에 있습니다. 주변을 확인한 뒤 "
+            "로봇팔이 접힌 스캔 자세에 있습니다. 주변을 확인한 뒤 "
             "익은 과실 수확을 시작하려면 Enter: "
         )
     return ripe

@@ -96,6 +96,9 @@ AUTO_COUNTDOWN_SEC = 3
 # It stays set for this process: every later run refuses to touch the arm
 # (its start-up would open the gripper) until the server is restarted.
 keep_torque_on_exit = False
+# v4 turns this on: with ripe targets (and no centre gate) the harvest starts
+# from the last scan view instead of returning to the central pose first.
+HARVEST_FROM_LAST_SCAN_VIEW = False
 INITIAL_GRIPPER_DURATION_SEC = 1.5
 INITIAL_READY_DURATION_SEC = 2.3
 INITIAL_CAMERA_MOVE_DURATION_SEC = 1.7
@@ -717,13 +720,7 @@ def main(
                 print("[적응형 스캔] 보수적 종료 조건을 충족해 남은 각도를 생략합니다.")
                 break
 
-        print("\n전 범위 스캔 완료. 중앙 접힘 자세로 복귀합니다.")
-        arm.move_joints(
-            camera_joints,
-            duration=post_scan_return_duration(current_scan_offset),
-        )
-        current_scan_offset = 0.0
-        safe_to_park = True
+        print("\n전 범위 스캔 완료.")
         cap.release()
         cap = None
         cv2.destroyAllWindows()
@@ -731,6 +728,19 @@ def main(
         raise_if_cancelled(cancel_callback)
         ripe_clusters = print_summary(clusters)
         detected_ripe_count = len(ripe_clusters)
+        if (ripe_clusters and HARVEST_FROM_LAST_SCAN_VIEW
+                and before_harvest is None):
+            # Same folded camera pose, only joint1 differs: the first
+            # prealign rotates straight from here.
+            print("중앙 복귀 없이 마지막 스캔 위치에서 바로 수확합니다.")
+        else:
+            print("중앙 접힘 자세로 복귀합니다.")
+            arm.move_joints(
+                camera_joints,
+                duration=post_scan_return_duration(current_scan_offset),
+            )
+            current_scan_offset = 0.0
+        safe_to_park = True
         if not ripe_clusters:
             print("수확 가능한 주황 호박이 없습니다.")
             emit_feedback(feedback_callback, successes, "failed")

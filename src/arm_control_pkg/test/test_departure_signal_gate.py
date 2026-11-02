@@ -499,3 +499,32 @@ def test_dropped_prescan_wait_keeps_pumpkin_held_with_torque(monkeypatch):
     assert names.count("close") == 1 and "open" not in names
     assert "park" not in names
     assert names[-1] == "disconnect_torque_on"
+
+
+# --- Harvest starts at the last scan view; first target nearest in joint1 ---
+
+def test_first_target_is_nearest_in_joint1_rest_keep_distance_order():
+    class At:
+        def joints(self):
+            return np.radians([126.4, 0, 0, 0, 0])
+
+    near = scan.PumpkinCluster(x=0.05, y=0.05)      # closest to the base
+    mid = scan.PumpkinCluster(x=0.0788, y=-0.1371)  # azimuth -60 deg
+    side = scan.PumpkinCluster(x=-0.1164, y=0.1144)  # azimuth +135 deg, far
+    ordered = deposit.first_nearest_in_joint1(At(), [near, mid, side])
+    assert ordered == [side, near, mid]
+
+
+def run_with_return_sentinel(monkeypatch, pumpkins):
+    monkeypatch.setattr(scan, "HARVEST_FROM_LAST_SCAN_VIEW", True)
+    monkeypatch.setattr(scan, "post_scan_return_duration", lambda _deg: 99.0)
+    events, _result = run_recorded(monkeypatch, pumpkins=pumpkins)
+    return [e for e in events if e[0] == "move" and e[2] == 99.0]
+
+
+def test_ripe_targets_skip_the_centre_return(monkeypatch):
+    assert run_with_return_sentinel(monkeypatch, FOUR) == []
+
+
+def test_no_ripe_target_still_returns_to_centre(monkeypatch):
+    assert len(run_with_return_sentinel(monkeypatch, [])) == 1
