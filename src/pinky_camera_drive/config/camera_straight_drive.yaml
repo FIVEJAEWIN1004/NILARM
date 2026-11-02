@@ -82,8 +82,11 @@ camera_straight_drive:
     next_stop_linear_speed: 0.10
     next_stop_start_handle_m: 0.22
     next_stop_end_handle_m: 0.14
-    next_stop_max_angular_z: 0.10
-    next_stop_max_angular_accel: 0.40
+    # ⑨ only (①~⑧ keep max_angular_speed 0.15). Code ceiling 0.60 rad/s.
+    next_stop_max_angular_z: 0.50
+    next_stop_max_angular_accel: 1.00
+    # ⑨ slows to position_error * gain near the stop (②/⑤/⑥ use 0.8).
+    next_stop_goal_slowdown_gain: 1.5
     target_x: 320.0
     # Expected fitted boundary x when the supplied calibration image is centered.
     boundary_reference_x: 23.0

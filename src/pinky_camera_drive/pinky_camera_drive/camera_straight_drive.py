@@ -21,6 +21,8 @@ from std_srvs.srv import SetBool
 
 
 AUTO_REFERENCE_FRAMES = 15
+# Hard ceiling for ⑨'s turn rate (next_stop_max_angular_z); tune below it.
+NEXT_STOP_MAX_ANGULAR_Z_LIMIT = 0.60
 # Same name/meaning as arm_control_pkg ..._v4: leave STATION on the /harvest
 # feedback status="departure_ready" (last pumpkin released and risen to bin
 # hover) instead of the final result; the result is still received and logged.
@@ -143,6 +145,7 @@ class CameraStraightDrive(Node):
         self.declare_parameter('next_stop_end_handle_m', 0.14)
         self.declare_parameter('next_stop_max_angular_z', 0.10)
         self.declare_parameter('next_stop_max_angular_accel', 0.40)
+        self.declare_parameter('next_stop_goal_slowdown_gain', 0.8)
         self.declare_parameter('target_x', 320.0)
         self.declare_parameter('boundary_reference_x', 23.0)
         self.declare_parameter('boundary_eval_y_ratio', 0.80)
@@ -460,6 +463,8 @@ class CameraStraightDrive(Node):
             self.get_parameter('next_stop_max_angular_z').value)
         self.next_stop_max_angular_accel = float(
             self.get_parameter('next_stop_max_angular_accel').value)
+        self.next_stop_goal_slowdown_gain = float(
+            self.get_parameter('next_stop_goal_slowdown_gain').value)
         self.target_x_config = float(self.get_parameter('target_x').value)
         self.boundary_reference_x = float(
             self.get_parameter('boundary_reference_x').value)
@@ -565,6 +570,7 @@ class CameraStraightDrive(Node):
                 self.next_stop_end_handle,
                 self.next_stop_max_angular_z,
                 self.next_stop_max_angular_accel,
+                self.next_stop_goal_slowdown_gain,
         ) <= 0.0:
             raise ValueError('station stop/safety parameters must be positive')
         if self.test_forward_speed > self.max_linear_speed:
@@ -593,9 +599,11 @@ class CameraStraightDrive(Node):
         if self.station_final_approach_max_angular > self.max_angular_speed:
             raise ValueError(
                 'station_final_approach_max_angular exceeds max_angular_speed')
-        if self.next_stop_max_angular_z > self.max_angular_speed:
+        # ⑨ has its own cap; max_angular_speed stays the ①~⑧ limit.
+        if self.next_stop_max_angular_z > NEXT_STOP_MAX_ANGULAR_Z_LIMIT:
             raise ValueError(
-                'next_stop_max_angular_z exceeds max_angular_speed')
+                'next_stop_max_angular_z must be within '
+                f'(0.0, {NEXT_STOP_MAX_ANGULAR_Z_LIMIT}] rad/s')
         if not 0.0 < self.next_stop_linear_speed <= self.max_linear_speed:
             raise ValueError(
                 'next_stop_linear_speed exceeds max_linear_speed')
@@ -1173,14 +1181,18 @@ class CameraStraightDrive(Node):
         )
         heading_error = self._normalize_angle(
             reference_yaw - self.current_yaw)
+        next_stop = self.state == DriveState.STATION_TO_NEXT_STOP
         target_linear_speed = (
             self.next_stop_linear_speed
-            if self.state == DriveState.STATION_TO_NEXT_STOP
+            if next_stop
             else self.curve_linear_speed
         )
+        goal_slowdown_gain = (
+            self.next_stop_goal_slowdown_gain if next_stop else 0.8)
         speed_from_goal = max(
             self.curve_min_linear_speed,
-            min(target_linear_speed, self.curve_position_error * 0.8),
+            min(target_linear_speed,
+                self.curve_position_error * goal_slowdown_gain),
         )
         if station_move or waypoint_move:
             speed_from_remaining_path = max(
@@ -1207,15 +1219,13 @@ class CameraStraightDrive(Node):
             - self.curve_kp_position * cross_track_error
             + self.curve_kp_yaw * heading_error
         )
-        angular = max(
-            -self.max_angular_speed,
-            min(self.max_angular_speed, angular),
+        angular_limit = (
+            self.next_stop_max_angular_z
+            if next_stop
+            else self.max_angular_speed
         )
-        if self.state == DriveState.STATION_TO_NEXT_STOP:
-            angular = max(
-                -self.next_stop_max_angular_z,
-                min(self.next_stop_max_angular_z, angular),
-            )
+        angular = max(-angular_limit, min(angular_limit, angular))
+        if next_stop:
             max_angular_step = (
                 self.next_stop_max_angular_accel / self.control_rate)
             angular = max(

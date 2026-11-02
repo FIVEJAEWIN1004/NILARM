@@ -154,6 +154,7 @@ def test_next_stop_uses_camera_speed_without_changing_other_curve_speed():
         max_angular_speed=0.15,
         next_stop_max_angular_z=0.10,
         next_stop_max_angular_accel=0.40,
+        next_stop_goal_slowdown_gain=0.8,
         control_rate=20.0,
         station_overshoot_tolerance=0.01,
         steering_command=0.0,
@@ -200,3 +201,47 @@ def test_removed_post_harvest_states_and_parameters_are_gone():
     )
     assert all(name not in source for name in removed)
     assert all(name not in config for name in removed)
+
+
+def test_next_stop_turns_faster_than_route_angular_limit():
+    published = []
+    node = types.SimpleNamespace(
+        state=drive.DriveState.STATION_TO_NEXT_STOP,
+        curve_started_at=Stamp(),
+        station_timeout=25.0,
+        station_max_travel=0.85,
+        curve_distance=0.0,
+        curve_target_x=0.26,
+        curve_target_y=-0.30,
+        curve_target_yaw=-math.pi / 2.0,
+        current_x=0.0,
+        current_y=0.0,
+        current_yaw=0.0,
+        curve_position_tolerance=0.02,
+        curve_yaw_tolerance=math.radians(3.0),
+        curve_points=np.array([[0.0, 0.0], [0.5, 0.0], [1.0, 0.0]]),
+        curve_progress_index=0,
+        curve_arc_lengths=np.array([0.0, 0.5, 1.0]),
+        curve_lookahead=0.05,
+        curve_yaws=np.array([0.0, 0.0, 0.0]),
+        curve_curvatures=np.array([-5.0, -5.0, -5.0]),
+        curve_min_linear_speed=0.015,
+        curve_linear_speed=0.04,
+        next_stop_linear_speed=0.10,
+        curve_kp_position=0.0,
+        curve_kp_yaw=0.0,
+        max_angular_speed=0.15,
+        next_stop_max_angular_z=0.50,
+        next_stop_max_angular_accel=100.0,
+        next_stop_goal_slowdown_gain=1.5,
+        control_rate=20.0,
+        station_overshoot_tolerance=0.01,
+        steering_command=0.0,
+        max_linear_speed=0.10,
+        cmd_pub=types.SimpleNamespace(publish=published.append),
+        command_active=False,
+    )
+    node._normalize_angle = Drive._normalize_angle
+    Drive._control_curve(node, Stamp())
+    assert published[-1].linear.x == pytest.approx(0.10)
+    assert published[-1].angular.z == pytest.approx(-0.50)
