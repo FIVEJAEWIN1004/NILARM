@@ -217,7 +217,7 @@ def test_final_camera_waits_for_line_then_faults_after_timeout():
     assert node.faults == ['yellow boundary unavailable']
 
 
-def test_final_camera_stops_at_target_distance():
+def test_final_camera_starts_straight_at_target_distance():
     node = types.SimpleNamespace(
         state=drive.DriveState.FINAL_CAMERA_DRIVING,
         final_camera_start_x=1.0,
@@ -225,7 +225,7 @@ def test_final_camera_stops_at_target_distance():
         final_camera_distance_target=0.45,
         finished=[],
     )
-    node._finish_final = node.finished.append
+    node._start_final_straight = node.finished.append
     msg = types.SimpleNamespace(pose=types.SimpleNamespace(pose=types.SimpleNamespace(
         position=types.SimpleNamespace(x=1.0, y=2.44),
         orientation=types.SimpleNamespace(x=0.0, y=0.0, z=0.0, w=1.0))))
@@ -235,7 +235,8 @@ def test_final_camera_stops_at_target_distance():
     assert node.finished == []
     msg.pose.pose.position.y = 2.45
     Drive._odom_callback(node, msg)
-    assert len(node.finished) == 1 and '0.450m' in node.finished[0]
+    assert len(node.finished) == 1
+    assert node.final_camera_distance == pytest.approx(0.45)
 
 
 def test_yaml_has_final_route_target_and_camera_speed():
@@ -254,6 +255,9 @@ def test_yaml_has_final_route_target_and_camera_speed():
     assert params['final_camera_distance_m'] == 0.45
     assert params['final_camera_linear_speed'] == pytest.approx(
         1.5 * params['linear_speed'])
+    assert params['final_straight_distance_m'] == 0.45
+    assert params['final_straight_linear_speed'] == params[
+        'final_camera_linear_speed']
 
 
 def test_next_stop_uses_camera_speed_without_changing_other_curve_speed():
@@ -324,10 +328,8 @@ def test_removed_post_harvest_states_and_parameters_are_gone():
         'NEXT_STOP_FINAL_ROTATE',
         'NEXT_WAYPOINT_WAIT',
         'NEXT_WAYPOINT_MOVE',
-        'FINAL_STRAIGHT_DRIVING',
         'next_stop_final_rotate_deg',
         'next_waypoint_target_forward_m',
-        'final_straight_distance_m',
     )
     assert all(name not in source for name in removed)
     assert all(name not in config for name in removed)
@@ -375,3 +377,53 @@ def test_next_stop_turns_faster_than_route_angular_limit():
     Drive._control_curve(node, Stamp())
     assert published[-1].linear.x == pytest.approx(0.10)
     assert published[-1].angular.z == pytest.approx(-0.50)
+
+
+def make_final_straight_node():
+    published = []
+    node = types.SimpleNamespace(
+        state=drive.DriveState.FINAL_STRAIGHT_DRIVING,
+        final_straight_started_at=Clock(0.0),
+        final_straight_timeout=8.0,
+        final_straight_start_yaw=0.0,
+        final_straight_linear_speed=0.15,
+        current_yaw=0.1,
+        curve_kp_yaw=0.8,
+        max_angular_speed=0.15,
+        cmd_pub=types.SimpleNamespace(publish=published.append),
+        faults=[],
+    )
+    node.published = published
+    node._normalize_angle = Drive._normalize_angle
+    node._enter_fault = node.faults.append
+    return node
+
+
+def test_final_straight_holds_heading_at_camera_speed():
+    node = make_final_straight_node()
+    Drive._control_final_straight(node, Clock(1.0))
+    assert node.published[-1].linear.x == pytest.approx(0.15)
+    assert node.published[-1].angular.z == pytest.approx(-0.08)
+    Drive._control_final_straight(node, Clock(8.0))
+    assert node.faults == ['final straight timeout']
+
+
+def test_final_straight_stops_at_target_distance():
+    node = types.SimpleNamespace(
+        state=drive.DriveState.FINAL_STRAIGHT_DRIVING,
+        final_straight_start_x=1.0,
+        final_straight_start_y=2.0,
+        final_straight_distance_target=0.45,
+        finished=[],
+    )
+    node._finish_final = node.finished.append
+    msg = types.SimpleNamespace(pose=types.SimpleNamespace(pose=types.SimpleNamespace(
+        position=types.SimpleNamespace(x=1.44, y=2.0),
+        orientation=types.SimpleNamespace(x=0.0, y=0.0, z=0.0, w=1.0))))
+    node.get_clock = lambda: Clock(0.0)
+    node._yaw_from_quaternion = Drive._yaw_from_quaternion
+    Drive._odom_callback(node, msg)
+    assert node.finished == []
+    msg.pose.pose.position.x = 1.451
+    Drive._odom_callback(node, msg)
+    assert len(node.finished) == 1 and '0.451m' in node.finished[0]

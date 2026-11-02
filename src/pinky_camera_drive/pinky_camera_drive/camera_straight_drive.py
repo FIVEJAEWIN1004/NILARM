@@ -23,8 +23,8 @@ from std_srvs.srv import SetBool
 AUTO_REFERENCE_FRAMES = 15
 # Hard ceiling for ⑨'s turn rate (next_stop_max_angular_z); tune below it.
 NEXT_STOP_MAX_ANGULAR_Z_LIMIT = 0.60
-# Hard ceiling for ⑪'s camera speed (final_camera_linear_speed); ①~⑧ keep
-# max_linear_speed.
+# Hard ceiling for ⑪/⑫ speeds (final_camera/final_straight_linear_speed);
+# ①~⑧ keep max_linear_speed.
 FINAL_CAMERA_MAX_LINEAR_SPEED = 0.20
 # Same name/meaning as arm_control_pkg ..._v4: leave STATION on the /harvest
 # feedback status="departure_ready" (last pumpkin released and risen to bin
@@ -59,6 +59,7 @@ class DriveState:
     STATION_TO_NEXT_STOP = 'STATION_TO_NEXT_STOP'
     NEXT_STOP_WAIT = 'NEXT_STOP_WAIT'
     FINAL_CAMERA_DRIVING = 'FINAL_CAMERA_DRIVING'
+    FINAL_STRAIGHT_DRIVING = 'FINAL_STRAIGHT_DRIVING'
     FINAL_REACHED = 'FINAL_REACHED'
     FAULT = 'FAULT'
 
@@ -166,6 +167,10 @@ class CameraStraightDrive(Node):
         self.declare_parameter('final_camera_distance_m', 0.45)
         self.declare_parameter('final_camera_linear_speed', 0.15)
         self.declare_parameter('final_camera_detect_timeout_sec', 1.0)
+        # ⑫: after ⑪, odom straight (heading held) for this distance, then stop.
+        self.declare_parameter('final_straight_distance_m', 0.45)
+        self.declare_parameter('final_straight_linear_speed', 0.15)
+        self.declare_parameter('final_straight_timeout_sec', 8.0)
         self.declare_parameter('target_x', 320.0)
         self.declare_parameter('boundary_reference_x', 23.0)
         self.declare_parameter('boundary_eval_y_ratio', 0.80)
@@ -507,6 +512,17 @@ class CameraStraightDrive(Node):
         self.final_camera_start_y = None
         self.final_camera_started_at = None
         self.final_camera_distance = 0.0
+        self.final_straight_distance_target = float(
+            self.get_parameter('final_straight_distance_m').value)
+        self.final_straight_linear_speed = float(
+            self.get_parameter('final_straight_linear_speed').value)
+        self.final_straight_timeout = float(
+            self.get_parameter('final_straight_timeout_sec').value)
+        self.final_straight_start_x = None
+        self.final_straight_start_y = None
+        self.final_straight_start_yaw = None
+        self.final_straight_started_at = None
+        self.final_straight_distance = 0.0
         self.target_x_config = float(self.get_parameter('target_x').value)
         self.boundary_reference_x = float(
             self.get_parameter('boundary_reference_x').value)
@@ -669,6 +685,14 @@ class CameraStraightDrive(Node):
                 <= FINAL_CAMERA_MAX_LINEAR_SPEED):
             raise ValueError(
                 'final_camera_linear_speed must be within '
+                f'(0.0, {FINAL_CAMERA_MAX_LINEAR_SPEED}] m/s')
+        if (self.final_straight_distance_target <= 0.0
+                or self.final_straight_timeout <= 0.0):
+            raise ValueError('final_straight distance/timeout must be positive')
+        if not (0.0 < self.final_straight_linear_speed
+                <= FINAL_CAMERA_MAX_LINEAR_SPEED):
+            raise ValueError(
+                'final_straight_linear_speed must be within '
                 f'(0.0, {FINAL_CAMERA_MAX_LINEAR_SPEED}] m/s')
         if self.final_camera_detect_timeout <= 0.0:
             raise ValueError('final_camera_detect_timeout_sec must be positive')
@@ -934,9 +958,18 @@ class CameraStraightDrive(Node):
                 self.current_y - self.final_camera_start_y,
             )
             if self.final_camera_distance >= self.final_camera_distance_target:
+                self._start_final_straight(self.get_clock().now())
+            return
+        if self.state == DriveState.FINAL_STRAIGHT_DRIVING:
+            self.final_straight_distance = math.hypot(
+                self.current_x - self.final_straight_start_x,
+                self.current_y - self.final_straight_start_y,
+            )
+            if (self.final_straight_distance
+                    >= self.final_straight_distance_target):
                 self._finish_final(
-                    f'⑪ camera distance={self.final_camera_distance:.3f}m '
-                    f'(target {self.final_camera_distance_target:.2f}m)')
+                    f'⑫ straight distance={self.final_straight_distance:.3f}m '
+                    f'(target {self.final_straight_distance_target:.2f}m)')
             return
         if self.state != DriveState.CAMERA_DRIVING:
             return
@@ -971,6 +1004,7 @@ class CameraStraightDrive(Node):
             DriveState.STATION_TO_NEXT_STOP,
             DriveState.NEXT_STOP_WAIT,
             DriveState.FINAL_CAMERA_DRIVING,
+            DriveState.FINAL_STRAIGHT_DRIVING,
         )
         if not self.enabled and not (self.sequence_active and sequence_state):
             return
@@ -1010,6 +1044,8 @@ class CameraStraightDrive(Node):
             self._control_next_stop_wait(now)
         elif self.state == DriveState.FINAL_CAMERA_DRIVING:
             self._control_final_camera_drive(now)
+        elif self.state == DriveState.FINAL_STRAIGHT_DRIVING:
+            self._control_final_straight(now)
 
     def _control_camera_drive(self, now):
         if self._is_stale(now, self.last_frame_time, self.frame_timeout):
@@ -1685,6 +1721,39 @@ class CameraStraightDrive(Node):
                 self._publish_stop()
                 return
         self._control_camera_drive(now)
+
+    def _start_final_straight(self, now):
+        self.get_logger().warning(
+            f'⑪ camera distance={self.final_camera_distance:.3f}m '
+            f'(target {self.final_camera_distance_target:.2f}m)')
+        self.final_straight_start_x = self.current_x
+        self.final_straight_start_y = self.current_y
+        self.final_straight_start_yaw = self.current_yaw
+        self.final_straight_started_at = now
+        self.final_straight_distance = 0.0
+        self.state = DriveState.FINAL_STRAIGHT_DRIVING
+        self.get_logger().warning(
+            'FINAL_STRAIGHT_DRIVING: odom straight, heading held, '
+            f'{self.final_straight_distance_target:.2f}m at '
+            f'{self.final_straight_linear_speed:.3f}m/s')
+
+    def _control_final_straight(self, now):
+        elapsed = (now - self.final_straight_started_at).nanoseconds / 1e9
+        if elapsed >= self.final_straight_timeout:
+            self._enter_fault('final straight timeout')
+            return
+        yaw_error = self._normalize_angle(
+            self.final_straight_start_yaw - self.current_yaw)
+        command = Twist()
+        command.linear.x = self.final_straight_linear_speed
+        command.angular.z = max(
+            -self.max_angular_speed,
+            min(self.max_angular_speed, self.curve_kp_yaw * yaw_error),
+        )
+        self.cmd_pub.publish(command)
+        self.last_linear_command = command.linear.x
+        self.steering_command = command.angular.z
+        self.command_active = True
 
     def _finish_final(self, result):
         self.enabled = False
