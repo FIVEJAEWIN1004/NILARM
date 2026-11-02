@@ -11,6 +11,14 @@ from arm_control_pkg.pumpkin_harvest import (
 )
 
 
+@pytest.fixture(autouse=True)
+def fixed_settle_sleeps(monkeypatch):
+    """Sequence tests expect the fixed settle sleeps; the feedback settle
+    (on in competition) has its own tests in test_harvest_optimizations."""
+    monkeypatch.setattr(deposit, "ENABLE_ADAPTIVE_ARM_SETTLE", False)
+    monkeypatch.setattr(deposit, "ENABLE_ADAPTIVE_SCAN_SETTLE", False)
+
+
 class RecordingArm:
     hz = 100.0
 

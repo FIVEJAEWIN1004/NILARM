@@ -128,7 +128,7 @@ def test_prealign_uses_joint1_change_from_actual_start(
         "stall_guard": True,
         "wait": True,
     }]
-    assert harvest.GRIPPER_CLOSE_DURATION_SEC == pytest.approx(2.0)
+    assert harvest.GRIPPER_CLOSE_DURATION_SEC == pytest.approx(1.5)
 
 
 def test_short_high_approach_keeps_floor(monkeypatch):
@@ -232,7 +232,7 @@ def test_continuous_approach_passes_high_and_stops_only_at_grasp(monkeypatch):
     )
     assert captured["caps"] == pytest.approx((21.9, 21.9))
     assert arm.close_calls == [{
-        "duration": 2.0,
+        "duration": harvest.GRIPPER_CLOSE_DURATION_SEC,
         "stall_guard": True,
         "wait": True,
     }]

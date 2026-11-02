@@ -53,7 +53,7 @@ HELD_MOVE_SPEEDUP = 2.0
 FINAL_APPROACH_DURATIONS_SEC = (2.5, 2.0, 2.0)
 DIRECT_FINAL_APPROACH_SPEEDUP = 2.0
 DIRECT_FINAL_APPROACH_MIN_DURATION_SEC = 0.5
-GRIPPER_CLOSE_DURATION_SEC = 2.0
+GRIPPER_CLOSE_DURATION_SEC = 1.5  # current-limited: stops on the pumpkin
 # Lift approximately 40 mm clear of the floor, then pass that waypoint without
 # stopping as the arm folds in the pumpkin's direction.
 LIFT_TO_FOLD_VIA_CLEARANCE_M = 0.040

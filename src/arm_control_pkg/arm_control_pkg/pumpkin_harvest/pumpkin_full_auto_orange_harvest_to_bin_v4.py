@@ -60,9 +60,8 @@ BIN_SETTLE_SEC = 0.7
 # Short pause after an arm-motion waypoint.  The separate 0.7 s fruit-release
 # wait remains unchanged so the pumpkin can clear the gripper.
 BIN_WAYPOINT_SETTLE_SEC = 0.3
-# The previous release was already 1.5x the base 3.0 s.  Double that current
-# speed: 3.0 s / 3.0 = 1.0 s.
-BIN_RELEASE_GRIPPER_SPEEDUP = 3.0
+# Release opening from the base 3.0 s: 3.0 s / 4.0 = 0.75 s (was 1.0 s).
+BIN_RELEASE_GRIPPER_SPEEDUP = 4.0
 BIN_RELEASE_GRIPPER_DURATION_SEC = (
     scan.grasp.GRIPPER_OPEN_DURATION_SEC / BIN_RELEASE_GRIPPER_SPEEDUP
 )
@@ -77,10 +76,12 @@ DIRECT_HOVER_BYPASS_APPROACH_DELTA_GUARD = True
 
 # Pure pre-planning is enabled; feedback/collision-dependent experiments stay
 # opt-in until they are verified on the real arm and camera.
-ENABLE_ADAPTIVE_ARM_SETTLE = False
+# Feedback settles: continue once joints are stable, never wait longer than
+# the old fixed time (no stable feedback = the old fixed wait).
+ENABLE_ADAPTIVE_ARM_SETTLE = True
 ENABLE_PRECOMPUTED_HARVEST_PLANS = False
 ENABLE_JOINT_COST_TARGET_ORDER = False
-ENABLE_ADAPTIVE_SCAN_SETTLE = False
+ENABLE_ADAPTIVE_SCAN_SETTLE = True
 ENABLE_ADAPTIVE_SCAN_EARLY_EXIT = False
 ENABLE_CONTINUOUS_SAFE_APPROACH = False
 ENABLE_DIRECT_FINAL_APPROACH = True

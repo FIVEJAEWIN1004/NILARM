@@ -15,6 +15,14 @@ SERVO_PROFILE_VELOCITY_DPS = 30 * 0.229 * 6.0  # 41.2 deg/s
 SERVO_PROFILE_ACCEL_DPS2 = 215.0
 HZ = 100.0
 
+@pytest.fixture(autouse=True)
+def fixed_settle_sleeps(monkeypatch):
+    """Sequence tests expect the fixed settle sleeps; the feedback settle
+    (on in competition) has its own tests in test_harvest_optimizations."""
+    monkeypatch.setattr(speed, "ENABLE_ADAPTIVE_ARM_SETTLE", False)
+    monkeypatch.setattr(speed, "ENABLE_ADAPTIVE_SCAN_SETTLE", False)
+
+
 
 @pytest.fixture(autouse=True)
 def no_stream_sleep(monkeypatch):
@@ -251,8 +259,8 @@ def test_bin_rotation_is_independent_of_safe_approach_rotation(monkeypatch):
 
 
 def test_deposit_with_taught_bin_poses(monkeypatch):
-    assert speed.BIN_RELEASE_GRIPPER_SPEEDUP == pytest.approx(3.0)
-    assert speed.BIN_RELEASE_GRIPPER_DURATION_SEC == pytest.approx(1.0)
+    assert speed.BIN_RELEASE_GRIPPER_SPEEDUP == pytest.approx(4.0)
+    assert speed.BIN_RELEASE_GRIPPER_DURATION_SEC == pytest.approx(0.75)
     assert speed.BIN_GRIPPER_RESTORE_EXTRA_SPEEDUP == pytest.approx(2.0)
     monkeypatch.setattr(speed, "DIRECT_NEXT_TARGET_FROM_BIN_HOVER", False)
     monkeypatch.setattr(transport, "DROP_RAISE_M", 0.0)
