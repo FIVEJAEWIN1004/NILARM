@@ -499,8 +499,8 @@ class CameraStraightDrive(Node):
             self.get_parameter('hsv_adaptive_roi_y_ratio').value)
 
     def _validate_parameters(self):
-        if not 0.0 < self.max_linear_speed <= 0.08:
-            raise ValueError('max_linear_speed must be within (0.0, 0.08] m/s')
+        if not 0.0 < self.max_linear_speed <= 0.10:
+            raise ValueError('max_linear_speed must be within (0.0, 0.10] m/s')
         if not 0.0 < self.linear_speed <= self.max_linear_speed:
             raise ValueError('linear_speed must not exceed max_linear_speed')
         if not 0.0 < self.max_angular_speed <= 0.15:

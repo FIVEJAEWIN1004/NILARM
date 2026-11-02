@@ -4,8 +4,8 @@ camera_straight_drive:
     cmd_vel_topic: /cmd_vel
     odom_topic: /odom
 
-    linear_speed: 0.05
-    max_linear_speed: 0.08
+    linear_speed: 0.10
+    max_linear_speed: 0.10
     max_angular_speed: 0.15
     kp: 0.002
     steering_sign: -1.0
@@ -79,7 +79,7 @@ camera_straight_drive:
     next_stop_target_forward_m: 0.26
     next_stop_target_right_m: 0.30
     next_stop_target_yaw_deg: -90.0
-    next_stop_linear_speed: 0.05
+    next_stop_linear_speed: 0.10
     next_stop_start_handle_m: 0.22
     next_stop_end_handle_m: 0.14
     next_stop_max_angular_z: 0.10
@@ -93,12 +93,12 @@ camera_straight_drive:
     roi_left_ratio: 0.0
     roi_right_ratio: 0.70
 
-    yellow_h_low: 20
-    yellow_h_high: 41
-    yellow_s_low: 58
-    yellow_s_high: 194
-    yellow_v_low: 94
-    yellow_v_high: 178
+    yellow_h_low: 21
+    yellow_h_high: 30
+    yellow_s_low: 123
+    yellow_s_high: 185
+    yellow_v_low: 148
+    yellow_v_high: 216
     # Runtime-only S/V widening around the yellow_* calibration (H never
     # changes, YAML is never rewritten). false = exact legacy thresholds.
     hsv_adaptive_enabled: true

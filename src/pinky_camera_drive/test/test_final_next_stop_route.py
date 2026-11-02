@@ -116,7 +116,7 @@ def test_yaml_has_final_route_target_and_camera_speed():
     )
     params = yaml.safe_load(config_path.read_text())['camera_straight_drive'][
         'ros__parameters']
-    assert params['linear_speed'] == 0.05
+    assert params['linear_speed'] == 0.10
     assert params['next_stop_linear_speed'] == params['linear_speed']
     assert params['next_stop_target_forward_m'] == 0.26
     assert params['next_stop_target_right_m'] == 0.30
