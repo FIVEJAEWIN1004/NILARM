@@ -159,7 +159,7 @@ class CameraStraightDrive(Node):
         self.declare_parameter('next_stop_wait_sec', 3.5)
         self.declare_parameter('next_stop2_target_forward_m', 0.17)
         self.declare_parameter('next_stop2_target_right_m', 0.17)
-        self.declare_parameter('next_stop2_target_yaw_deg', -90.0)
+        self.declare_parameter('next_stop2_target_yaw_deg', -80.0)
         self.declare_parameter('next_stop2_start_handle_m', 0.094)
         self.declare_parameter('next_stop2_end_handle_m', 0.094)
         # ⑪: after ⑩, follow the left yellow line like ① for this distance.
