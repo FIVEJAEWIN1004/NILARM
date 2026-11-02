@@ -92,7 +92,7 @@ def test_finish_next_stop_goes_directly_to_final_reached_and_stops_five_times(
         next_stop_target_yaw=math.radians(-90.0),
         curve_distance=math.hypot(0.26, 0.30),
         next_stop_target_forward=0.28,
-        next_stop_target_right=0.30,
+        next_stop_target_right=0.29,
         next_stop_target_yaw_relative=math.radians(-90.0),
         music_pub=object(),
         stops=[],
@@ -109,7 +109,7 @@ def test_finish_next_stop_goes_directly_to_final_reached_and_stops_five_times(
     assert node.last_linear_command == 0.0 and node.steering_command == 0.0
     assert node.stops == [5]
     assert node.media == ['STOP']
-    assert 'forward=0.28m, right=0.30m, yaw=-90deg' in node.log.lines[-1]
+    assert 'forward=0.28m, right=0.29m, yaw=-90deg' in node.log.lines[-1]
 
 
 def test_yaml_has_final_route_target_and_camera_speed():
@@ -122,7 +122,7 @@ def test_yaml_has_final_route_target_and_camera_speed():
     assert params['linear_speed'] == 0.10
     assert params['next_stop_linear_speed'] == params['linear_speed']
     assert params['next_stop_target_forward_m'] == 0.28
-    assert params['next_stop_target_right_m'] == 0.30
+    assert params['next_stop_target_right_m'] == 0.29
     assert params['next_stop_target_yaw_deg'] == -90.0
     assert params['curve_linear_speed'] == 0.04
 
