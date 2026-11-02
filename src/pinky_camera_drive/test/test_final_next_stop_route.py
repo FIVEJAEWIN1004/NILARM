@@ -253,8 +253,7 @@ def test_yaml_has_final_route_target_and_camera_speed():
     assert params['next_stop_target_yaw_deg'] == -90.0
     assert params['curve_linear_speed'] == 0.04
     assert params['final_camera_distance_m'] == 0.45
-    assert params['final_camera_linear_speed'] == pytest.approx(
-        1.5 * params['linear_speed'])
+    assert params['final_camera_linear_speed'] == 0.20
     assert params['final_straight_distance_m'] == 0.45
     assert params['final_straight_linear_speed'] == params[
         'final_camera_linear_speed']
