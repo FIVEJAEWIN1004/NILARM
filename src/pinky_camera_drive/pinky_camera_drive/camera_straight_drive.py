@@ -138,7 +138,7 @@ class CameraStraightDrive(Node):
         self.declare_parameter('use_harvest_action', True)
         self.declare_parameter('harvest_target_count', 1)
         self.declare_parameter('next_stop_target_forward_m', 0.28)
-        self.declare_parameter('next_stop_target_right_m', 0.30)
+        self.declare_parameter('next_stop_target_right_m', 0.29)
         self.declare_parameter('next_stop_target_yaw_deg', -90.0)
         self.declare_parameter('next_stop_linear_speed', 0.05)
         self.declare_parameter('next_stop_start_handle_m', 0.22)
