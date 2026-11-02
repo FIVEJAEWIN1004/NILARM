@@ -54,7 +54,8 @@ start_server() {
         >>"${log}" 2>&1 </dev/null 9>&- &
     pid=$!
     echo "${pid}" >"${pid_file}"
-    sleep "${NILARM_HARVEST_SETTLE_SEC:-5}"
+    # Only catches an immediate crash (import/env); READY is then polled.
+    sleep "${NILARM_HARVEST_SETTLE_SEC:-1}"
     if ! kill -0 "${pid}" 2>/dev/null; then
         echo "FAIL: harvest server exited during startup; last log lines:"
         tail -n 20 "${log}"

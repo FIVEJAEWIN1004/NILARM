@@ -58,7 +58,7 @@ until system_ready; do
         exit 1
     fi
     echo "  waiting:${not_ready}"
-    sleep 2
+    sleep 0.5
 done
 echo "nilarm-start: all ready. Arming when the yellow boundary is seen..."
 

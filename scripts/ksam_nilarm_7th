@@ -59,4 +59,7 @@ say "/harvest 서버 준비 완료"
 
 say "Pinky competition launch 시작"
 say "prescan 요청 및 주행 안전 게이트 대기"
+# /harvest was just restarted above: skip nilarm-start's second SSH ensure
+# (it still requires exactly 1 /harvest server before arming).
+export NILARM_REMOTE_HARVEST=0
 exec "${repo}/src/nilarm_bringup/scripts/nilarm" "$@"
