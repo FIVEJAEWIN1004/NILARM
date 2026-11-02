@@ -167,13 +167,17 @@ def test_tenth_stop_starts_final_camera_drive_from_actual_pose(
     node.target_x_config = 320.0
     node.final_camera_distance_target = 0.45
     node.final_camera_linear_speed = 0.15
-    for name in ('_start_final_camera_drive', '_clear_detection'):
+    node.path_detected = False  # no line fitted during ⑩
+    node.state = drive.DriveState.FINAL_CAMERA_DRIVING
+    for name in ('_start_final_camera_drive', '_clear_detection',
+                 '_set_camera_steering', '_in_second_next_stop'):
         setattr(node, name, getattr(Drive, name).__get__(node))
     Drive._finish_next_stop(node)
     assert node.state == drive.DriveState.FINAL_CAMERA_DRIVING
     assert node.enabled and node.sequence_active and not node.command_active
     assert node.last_linear_command == 0.0 and node.steering_command == 0.0
     assert not node.path_detected  # waits for a fresh line fit
+    assert node.stops[-1] == 1  # stopped while waiting
     assert (node.final_camera_start_x, node.final_camera_start_y) == (0.26, -0.30)
     assert 'forward=0.13m, right=0.13m, yaw=-90deg' in node.log.lines[-2]
 
@@ -301,6 +305,7 @@ def test_next_stop_uses_camera_speed_without_changing_other_curve_speed():
         command_active=False,
     )
     node._normalize_angle = Drive._normalize_angle
+    node._in_second_next_stop = Drive._in_second_next_stop.__get__(node)
     Drive._control_curve(node, Stamp())
     assert published[-1].linear.x == pytest.approx(0.05)
     assert node.curve_linear_speed == 0.04
@@ -376,6 +381,7 @@ def test_next_stop_turns_faster_than_route_angular_limit():
         command_active=False,
     )
     node._normalize_angle = Drive._normalize_angle
+    node._in_second_next_stop = Drive._in_second_next_stop.__get__(node)
     Drive._control_curve(node, Stamp())
     assert published[-1].linear.x == pytest.approx(0.10)
     assert published[-1].angular.z == pytest.approx(-0.50)
@@ -429,3 +435,85 @@ def test_final_straight_stops_at_target_distance():
     msg.pose.pose.position.x = 1.451
     Drive._odom_callback(node, msg)
     assert len(node.finished) == 1 and '0.451m' in node.finished[0]
+
+
+def test_line_fitted_during_tenth_curve_starts_camera_without_stop():
+    node = types.SimpleNamespace(
+        state=drive.DriveState.STATION_TO_NEXT_STOP,
+        next_stop_leg=2,
+        steering_command=-0.3,  # owned by the ⑩ curve
+        path_detected=True,
+        current_x=0.5,
+        current_y=-0.5,
+        final_camera_distance_target=0.45,
+        final_camera_linear_speed=0.20,
+        command_active=True,
+        last_linear_command=0.10,
+        stops=[],
+    )
+    node.log = Log()
+    node.get_logger = lambda: node.log
+    node._publish_stop = lambda repeat=1: node.stops.append(repeat)
+    node._in_second_next_stop = Drive._in_second_next_stop.__get__(node)
+    # A ⑩ frame updates only the preview, never the curve's steering.
+    Drive._set_camera_steering(node, 0.06)
+    assert node.steering_command == -0.3
+    assert node.camera_steering_preview == 0.06
+
+    Drive._start_final_camera_drive(node, Clock(5.0))
+    assert node.state == drive.DriveState.FINAL_CAMERA_DRIVING
+    assert node.stops == []
+    assert node.command_active and node.last_linear_command == 0.10
+    assert node.steering_command == 0.06
+    assert 'no stop' in node.log.lines[-1]
+
+
+def test_tenth_curve_does_not_slow_for_goal_and_overshoot_hands_over():
+    published = []
+    node = types.SimpleNamespace(
+        state=drive.DriveState.STATION_TO_NEXT_STOP,
+        next_stop_leg=2,
+        curve_started_at=Stamp(),
+        station_timeout=25.0,
+        station_max_travel=0.85,
+        curve_distance=0.0,
+        curve_target_x=0.03,
+        curve_target_y=0.0,
+        curve_target_yaw=0.0,
+        current_x=0.0,
+        current_y=0.0,
+        current_yaw=math.radians(10.0),
+        curve_position_tolerance=0.02,
+        curve_yaw_tolerance=math.radians(3.0),
+        curve_points=np.array([[0.0, 0.0], [0.015, 0.0], [0.03, 0.0]]),
+        curve_progress_index=0,
+        curve_arc_lengths=np.array([0.0, 0.015, 0.03]),
+        curve_lookahead=0.05,
+        curve_yaws=np.array([0.0, 0.0, 0.0]),
+        curve_curvatures=np.array([0.0, 0.0, 0.0]),
+        curve_min_linear_speed=0.015,
+        curve_linear_speed=0.04,
+        next_stop_linear_speed=0.10,
+        curve_kp_position=1.5,
+        curve_kp_yaw=0.8,
+        max_angular_speed=0.15,
+        next_stop_max_angular_z=0.50,
+        next_stop_max_angular_accel=1.0,
+        next_stop_goal_slowdown_gain=1.5,
+        control_rate=20.0,
+        station_overshoot_tolerance=0.01,
+        steering_command=0.0,
+        max_linear_speed=0.10,
+        cmd_pub=types.SimpleNamespace(publish=published.append),
+        command_active=False,
+        finished=[],
+    )
+    node._normalize_angle = Drive._normalize_angle
+    node._in_second_next_stop = Drive._in_second_next_stop.__get__(node)
+    node._finish_next_stop = lambda path_complete=False: node.finished.append(
+        path_complete)
+    Drive._control_curve(node, Stamp())
+    assert published[-1].linear.x == pytest.approx(0.10)  # 3 cm left: no slowdown
+    node.current_x = 0.045  # 1.5 cm past the target
+    Drive._control_curve(node, Stamp())
+    assert node.finished == [True]

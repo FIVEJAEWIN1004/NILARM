@@ -759,7 +759,9 @@ class CameraStraightDrive(Node):
             return
         self.last_frame_time = self.get_clock().now()
         self.frame_count += 1
-        if self.state == DriveState.DISABLED or self.state in CAMERA_STATES:
+        if (self.state == DriveState.DISABLED
+                or self.state in CAMERA_STATES
+                or self._in_second_next_stop()):
             self._detect_yellow_boundary(frame)
         self._log_status_if_due()
 
@@ -854,7 +856,19 @@ class CameraStraightDrive(Node):
         self.boundary_x = int(round(boundary_x))
         self.target_x = int(round(self.target_x_config))
         self.path_error = int(round(error))
-        self.steering_command = angular
+        self._set_camera_steering(angular)
+
+    def _in_second_next_stop(self):
+        return (self.state == DriveState.STATION_TO_NEXT_STOP
+                and getattr(self, 'next_stop_leg', 1) == 2)
+
+    def _set_camera_steering(self, angular):
+        # During ⑩ the curve owns steering_command (its accel limit); keep the
+        # line steering aside so ⑪ can start without waiting for a frame.
+        if self._in_second_next_stop():
+            self.camera_steering_preview = angular
+        else:
+            self.steering_command = angular
 
     def _adapt_yellow_sv(self, frame, lower, upper):
         """Bounded, in-memory S/V widening from smoothed scene brightness."""
@@ -890,7 +904,7 @@ class CameraStraightDrive(Node):
         self.boundary_x = None
         self.target_x = int(round(self.target_x_config))
         self.path_error = None
-        self.steering_command = 0.0
+        self._set_camera_steering(0.0)
 
     def _odom_callback(self, msg: Odometry):
         self.last_odom_time = self.get_clock().now()
@@ -1253,6 +1267,7 @@ class CameraStraightDrive(Node):
             self.curve_arc_lengths[-1]
             - self.curve_arc_lengths[self.curve_progress_index],
         )
+        flows_into_camera = self._in_second_next_stop()
         if station_move or waypoint_move:
             terminal_dx = self.current_x - self.curve_target_x
             terminal_dy = self.current_y - self.curve_target_y
@@ -1261,6 +1276,9 @@ class CameraStraightDrive(Node):
                 + math.sin(self.curve_target_yaw) * terminal_dy
             )
             if distance_past_target > self.station_overshoot_tolerance:
+                if flows_into_camera:
+                    self._finish_next_stop(path_complete=True)
+                    return
                 self._enter_fault(f'{motion_name} target overshoot detected')
                 return
             if self.curve_progress_index >= len(self.curve_points) - 1:
@@ -1307,7 +1325,9 @@ class CameraStraightDrive(Node):
             min(target_linear_speed,
                 self.curve_position_error * goal_slowdown_gain),
         )
-        if station_move or waypoint_move:
+        if flows_into_camera:
+            speed_from_goal = target_linear_speed  # ⑪ continues, no stop
+        elif station_move or waypoint_move:
             speed_from_remaining_path = max(
                 self.curve_min_linear_speed,
                 remaining_path * 0.8,
@@ -1699,20 +1719,28 @@ class CameraStraightDrive(Node):
         self._start_final_camera_drive(self.get_clock().now())
 
     def _start_final_camera_drive(self, now):
-        # Detection is off during ⑨/⑩, so wait for a fresh line fit.
-        self._clear_detection()
-        self.command_active = False
-        self.last_linear_command = 0.0
+        # The line was fitted during ⑩: keep driving with its steering. Without
+        # a fit, stop and wait (up to final_camera_detect_timeout_sec).
+        line_ready = self.path_detected
         self.final_camera_start_x = self.current_x
         self.final_camera_start_y = self.current_y
         self.final_camera_started_at = now
         self.final_camera_distance = 0.0
         self.state = DriveState.FINAL_CAMERA_DRIVING
-        self._publish_stop()
+        if line_ready:
+            self.steering_command = getattr(
+                self, 'camera_steering_preview', 0.0)
+        else:
+            self._clear_detection()
+            self.command_active = False
+            self.last_linear_command = 0.0
+            self._publish_stop()
         self.get_logger().warning(
             'FINAL_CAMERA_DRIVING: left yellow line, '
             f'{self.final_camera_distance_target:.2f}m at '
-            f'{self.final_camera_linear_speed:.3f}m/s')
+            f'{self.final_camera_linear_speed:.3f}m/s; '
+            + ('line already fitted, no stop' if line_ready
+               else 'waiting for line fit'))
 
     def _control_final_camera_drive(self, now):
         if not self.path_detected:
