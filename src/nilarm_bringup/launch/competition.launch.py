@@ -7,10 +7,13 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import EmitEvent, RegisterEventHandler
+from launch.actions import (
+    DeclareLaunchArgument, EmitEvent, RegisterEventHandler)
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 # Custom libcamera 0.3.2 (OV5647) lives in /usr/local; only the camera process
 # gets it, so motor/drive/LED/LCD keep the stock ROS library path.
@@ -45,7 +48,11 @@ def generate_launch_description():
     drive = Node(
         package='pinky_camera_drive', executable='camera_straight_drive',
         name='camera_straight_drive', output='screen', emulate_tty=True,
-        parameters=[drive_params])
+        parameters=[drive_params, {
+            # false (pinky_drive_test): no /harvest; ENTER departs STATION.
+            'use_harvest_action': ParameterValue(
+                LaunchConfiguration('use_harvest_action'), value_type=bool),
+        }])
 
     # Losing motors, camera or the driver must not leave a half-running robot.
     stop_on_exit = [
@@ -57,4 +64,5 @@ def generate_launch_description():
                              (drive, 'camera_straight_drive'))]
 
     return LaunchDescription(
-        [bringup, camera, status_display, drive] + stop_on_exit)
+        [DeclareLaunchArgument('use_harvest_action', default_value='true'),
+         bringup, camera, status_display, drive] + stop_on_exit)

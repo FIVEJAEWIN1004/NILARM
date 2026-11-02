@@ -47,7 +47,9 @@ if [[ "$1" != "--no-command" ]]; then
     ln -sfn "${repo}/scripts/start_remote_hsv_calibrate.sh" "$HOME/.local/bin/ksam_hsv_calibrate"
     # 7th KSAM match: laptop arm build + /harvest restart, then nilarm.
     ln -sfn "${repo}/scripts/ksam_nilarm_7th" "$HOME/.local/bin/ksam_nilarm_7th"
-    echo "Installed: ~/.local/bin/nilarm, ~/.local/bin/nilarm-start, ~/.local/bin/ksam_hsv_calibrate, ~/.local/bin/ksam_nilarm_7th"
+    # Drive-only test: no laptop/arm, ENTER departs STATION.
+    ln -sfn "${repo}/scripts/pinky_drive_test" "$HOME/.local/bin/pinky_drive_test"
+    echo "Installed: ~/.local/bin/nilarm, ~/.local/bin/nilarm-start, ~/.local/bin/ksam_hsv_calibrate, ~/.local/bin/ksam_nilarm_7th, ~/.local/bin/pinky_drive_test"
     case ":$PATH:" in
         *":$HOME/.local/bin:"*) ;;
         *) echo "~/.local/bin is not on PATH in this shell; open a new login shell (ssh again)." ;;
@@ -60,6 +62,7 @@ Ready. One time for the laptop link: ./scripts/setup_remote_harvest.sh <user>@<l
 Every match:
   nilarm          # starts Pinky + laptop /harvest server, checks everything, then STARTs
   ksam_nilarm_7th # 7th KSAM: rebuild + restart laptop /harvest first, then nilarm
+  pinky_drive_test # drive only (no laptop/arm); press ENTER at STATION to depart
 If a check fails the robot stays stopped; fix it and run `nilarm-start`.
 Do not run the laptop camera_straight_drive (exactly one drive node allowed).
 USAGE

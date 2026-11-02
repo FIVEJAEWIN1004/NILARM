@@ -76,27 +76,14 @@ camera_straight_drive:
     manual_station_departure: true
     use_harvest_action: true
     harvest_target_count: 1
-    next_stop_target_forward_m: 0.19
-    next_stop_target_right_m: 0.36
-    next_stop_target_yaw_deg: -45.0
+    next_stop_target_forward_m: 0.26
+    next_stop_target_right_m: 0.30
+    next_stop_target_yaw_deg: -90.0
+    next_stop_linear_speed: 0.05
     next_stop_start_handle_m: 0.22
     next_stop_end_handle_m: 0.14
     next_stop_max_angular_z: 0.10
     next_stop_max_angular_accel: 0.40
-    next_stop_final_rotate_deg: 30.0
-    next_stop_final_rotate_speed: 0.15
-    next_stop_final_rotate_timeout_sec: 8.0
-    next_stop_final_rotate_max_deg: 35.0
-    next_waypoint_wait_sec: 3.5
-    next_waypoint_target_forward_m: 0.18
-    next_waypoint_target_right_m: 0.17
-    next_waypoint_target_yaw_deg: -80.0
-    next_waypoint_start_handle_m: 0.10
-    next_waypoint_end_handle_m: 0.07
-    final_camera_distance_m: 0.60
-    final_straight_distance_m: 0.33
-    final_straight_timeout_sec: 10.0
-    final_straight_max_travel_m: 0.40
     target_x: 320.0
     # Expected fitted boundary x when the supplied calibration image is centered.
     boundary_reference_x: 23.0

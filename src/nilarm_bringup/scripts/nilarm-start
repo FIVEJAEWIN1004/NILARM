@@ -8,6 +8,7 @@
 #   /camera/image/compressed + /odom publishers, exactly 1 /harvest server.
 # Once ready it also asks the laptop for an OMX pre-scan (/harvest/prescan),
 # so the arm scans while Pinky drives; that never gates the start.
+# NILARM_DRIVE_ONLY=1 (pinky_drive_test): no laptop, /harvest or pre-scan.
 here="$(dirname "$(readlink -f "$0")")"
 repo="$(cd "${here}/../../.." && pwd)"
 source "${NILARM_ENV_SCRIPT:-${here}/nilarm_env.sh}" || exit 1
@@ -32,13 +33,14 @@ system_ready() {
     (( $(count_of 'Publisher count' topic info /camera/image/compressed) >= 1 )) \
         || not_ready+=" no:camera_publisher"
     (( $(count_of 'Publisher count' topic info /odom) >= 1 )) || not_ready+=" no:/odom"
+    [[ "${NILARM_DRIVE_ONLY:-0}" == "1" ]] && { [[ -z "${not_ready}" ]]; return; }
     local harvest
     harvest="$(count_of 'Action servers' action info /harvest)"
     [[ "${harvest}" == "1" ]] || not_ready+=" harvest_servers=${harvest}(need 1)"
     [[ -z "${not_ready}" ]]
 }
 
-if [[ "${NILARM_REMOTE_HARVEST:-1}" == "1" ]]; then
+if [[ "${NILARM_DRIVE_ONLY:-0}" != "1" && "${NILARM_REMOTE_HARVEST:-1}" == "1" ]]; then
     if ! "${repo}/scripts/start_remote_harvest.sh"; then
         echo "NOT STARTED: laptop /harvest server could not be ensured (see above)." >&2
         echo "Robot stays stopped. Fix it, then run: nilarm-start" >&2
@@ -64,7 +66,7 @@ echo "nilarm-start: all ready. Arming when the yellow boundary is seen..."
 # Pinky's /harvest goal at STATION. Best effort, in parallel with arming: if it
 # fails, /harvest simply scans at STATION as before. NILARM_PRESCAN=0 = off.
 prescan_pid=""
-if [[ "${NILARM_PRESCAN:-1}" == "1" ]]; then
+if [[ "${NILARM_DRIVE_ONLY:-0}" != "1" && "${NILARM_PRESCAN:-1}" == "1" ]]; then
     (
         reply="$(timeout 15 ros2 service call /harvest/prescan \
             std_srvs/srv/Trigger "{}" 2>&1)"
