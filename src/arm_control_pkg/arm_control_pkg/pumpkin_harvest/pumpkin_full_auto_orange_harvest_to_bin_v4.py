@@ -72,7 +72,7 @@ DIRECT_NEXT_TARGET_FROM_BIN_HOVER = True
 # feedback status="departure_ready"; ㉑/㉒ continue while Pinky drives. Same
 # name/meaning on Pinky (pinky_camera_drive.camera_straight_drive). False =
 # Pinky departs on the final /harvest result as before.
-ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE = False
+ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE = True
 DIRECT_HOVER_BYPASS_APPROACH_DELTA_GUARD = True
 
 # Pure pre-planning is enabled; feedback/collision-dependent experiments stay

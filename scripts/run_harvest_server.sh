@@ -4,10 +4,11 @@
 #   source scripts/activate_pumpkin_harvest.sh; export ROS_DOMAIN_ID=99
 #   python3 -m arm_control_pkg.pumpkin_harvest.harvest_action_server \
 #     --ros-args -p harvest_all_detected:=true
-# usage: run_harvest_server.sh start | check | status | build | restart
+# usage: run_harvest_server.sh start | check | status | build | restart | prescan
 #   build:   colcon build --packages-up-to arm_control_pkg in the OMX env
 #   restart: SIGTERM exactly the one running server (PID file / exact cmdline),
 #            start the current code, wait until /harvest has exactly 1 server
+#   prescan: ask the running server for an OMX pre-scan (/harvest/prescan)
 # Log: <repo>/.nilarm_logs/harvest_server.log, PID: harvest_server.pid (git-ignored)
 repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 log_dir="${repo}/.nilarm_logs"
@@ -141,8 +142,14 @@ restart)
     wait_harvest_ready || exit 1
     echo "log: ${log}"
     ;;
+prescan)
+    reply="$(in_harvest_env timeout 15 ros2 service call /harvest/prescan \
+        std_srvs/srv/Trigger "{}" 2>&1)"
+    grep -o "message='[^']*'" <<<"${reply}" || echo "no response"
+    grep -q 'success=True' <<<"${reply}" || exit 1
+    ;;
 *)
-    echo "usage: $0 start|check|status|build|restart" >&2
+    echo "usage: $0 start|check|status|build|restart|prescan" >&2
     exit 2
     ;;
 esac

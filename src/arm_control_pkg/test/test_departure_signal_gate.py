@@ -303,15 +303,19 @@ def test_departure_ready_once_after_last_rise_and_settle(monkeypatch):
     assert result.harvested_count == 4
     (at,) = departures(events)  # exactly once, for the 4-pumpkin run
     assert events[at] == ("fb", 4, "departure_ready")
-    # ⑱ release, 0.7 s drop wait, ⑲ open-gripper rise, 0.7 s settle, then ㉔.
+    # ⑱ release, 0.7 s drop wait, ⑲ open-gripper rise, 0.3 s settle, then ㉔.
     assert [e[0] for e in events[at - 4:at]] == ["open", "sleep", "move", "sleep"]
-    assert events[at - 3][1] == events[at - 1][1] == deposit.BIN_SETTLE_SEC
+    # 0.7 s fruit-release wait, then the open-gripper rise and its 0.3 s
+    # waypoint settle: departure_ready is sent right at bin hover.
+    assert events[at - 3][1] == deposit.BIN_SETTLE_SEC
+    assert events[at - 1][1] == deposit.BIN_WAYPOINT_SETTLE_SEC
     # Pumpkins 1-3 were all released before, without any departure_ready.
     assert [e[0] for e in events[:at]].count("open") == 4
     # ㉑ gripper restore/fold and direct ㉒ park still run after; result
     # feedback remains between the completed arm stages and PARK cleanup.
     after = [e[0] for e in events[at + 1:]]
-    assert after == ["restore_gripper", "move", "fb", "fb", "park"]
+    # DIRECT_LAST_HOVER_TO_PARK: straight from hover to park, no fold move.
+    assert after == ["restore_gripper", "fb", "fb", "park"]
     assert ("fb", 4, "completed") in events[at + 1:]
     assert events.index(("fb", 4, "placing")) > at  # counted after ⑲
 

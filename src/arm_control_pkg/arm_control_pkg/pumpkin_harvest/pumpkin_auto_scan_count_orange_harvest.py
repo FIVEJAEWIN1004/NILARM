@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 import math
+import threading
 import time
 from typing import Callable
 
@@ -246,6 +247,22 @@ def normalized_gripper_value(arm) -> float:
     if not np.isfinite(value):
         raise RuntimeError("현재 기본 그리퍼 폭을 계산하지 못했습니다.")
     return min(1.0, max(0.0, float(value)))
+
+
+def warm_up_detector(model) -> None:
+    """Run the slow first YOLO inference (~1.5 s) off the scan path."""
+    try:
+        blank = np.zeros(
+            (base.CAMERA_HEIGHT, base.CAMERA_WIDTH, 3), dtype=np.uint8)
+        yolo_detector.detect_pumpkin_boxes(
+            model,
+            blank,
+            confidence=base.CONFIDENCE,
+            image_size=base.YOLO_IMAGE_SIZE,
+            target_names=base.TARGET_CLASS_NAMES,
+        )
+    except Exception as error:  # the real first frame simply pays it instead
+        print(f"[YOLO 예열 생략] {error}")
 
 
 def initialize_arm_for_scan(arm, camera_joints) -> float:
@@ -632,6 +649,10 @@ def main(
         model = YOLO(str(model_path))
         base.validate_model(model)
         cap = base.open_camera()
+        # The first inference runs while the arm initializes, not at -140 deg.
+        detector_warmup = threading.Thread(
+            target=warm_up_detector, args=(model,), daemon=True)
+        detector_warmup.start()
         require_start()
         raise_if_cancelled(cancel_callback)
 
@@ -643,6 +664,7 @@ def main(
         print(f"시작 시 기본 그리퍼 폭 저장: {default_gripper_value:.3f}")
         safe_to_park = True
 
+        detector_warmup.join()
         clusters: list[PumpkinCluster] = []
         emit_feedback(feedback_callback, successes, "scanning")
         for commanded in SCAN_OFFSETS_DEG:

@@ -36,11 +36,13 @@ case "${@: -1}" in
   true) exit "${STUB_CONNECT_RC:-0}" ;;
   *" build") exit "${STUB_BUILD_RC:-0}" ;;
   *" restart") exit "${STUB_RESTART_RC:-0}" ;;
+  *" prescan") exit "${STUB_PRESCAN_RC:-0}" ;;
 esac
 exit 99
 '''
 NILARM_STUB = r'''#!/usr/bin/env bash
 echo "nilarm ROS_DOMAIN_ID=$ROS_DOMAIN_ID args=$*" >> "$STUB_LOG"
+echo "nilarm-env PRESCAN=${NILARM_PRESCAN-unset} REMOTE=${NILARM_REMOTE_HARVEST-unset}" >> "$STUB_LOG"
 '''
 
 
@@ -76,8 +78,11 @@ def test_is_a_pinky_command_that_execs_repo_nilarm():
 def test_success_builds_then_restarts_then_execs_nilarm(tmp_path):
     result = run_ksam(tmp_path)
     assert result.returncode == 0, result.stderr
-    kinds = [c.split()[-1] if c.startswith('ssh') else 'nilarm' for c in result.calls]
-    assert kinds == ['true', 'build', 'restart', 'nilarm']
+    kinds = [c.split()[-1] if c.startswith('ssh') else 'nilarm'
+             for c in result.calls if not c.startswith('nilarm-env')]
+    assert kinds == ['true', 'build', 'restart', 'prescan', 'nilarm']
+    # The laptop pre-scan already runs: nilarm-start must not restart it.
+    assert 'nilarm-env PRESCAN=0 REMOTE=0' in result.calls
     assert result.nilarm == ['nilarm ROS_DOMAIN_ID=99 args=--x']
     for line in ('노트북 SSH 연결 확인', '노트북 최신 로봇팔 코드 빌드', '기존 수확 서버 재시작',
                  '/harvest 서버 준비 완료', 'Pinky competition launch 시작'):
@@ -295,3 +300,11 @@ def test_current_speed_direct_and_release_settings():
     assert 'DIRECT_NEXT_TARGET_FROM_BIN_HOVER = True' in v4
     assert 'DIRECT_HOVER_BYPASS_APPROACH_DELTA_GUARD = True' in v4
     assert 'PARK_MIN_DURATION_SEC = 1.5' in v4  # ㉒
+
+
+def test_prescan_request_failure_still_launches_and_lets_nilarm_start_retry(tmp_path):
+    result = run_ksam(tmp_path, STUB_PRESCAN_RC='1')
+    assert result.returncode == 0, result.stderr
+    assert result.nilarm == ['nilarm ROS_DOMAIN_ID=99 args=--x']
+    assert 'nilarm-env PRESCAN=unset REMOTE=0' in result.calls
+    assert 'prescan 요청 실패' in result.stdout

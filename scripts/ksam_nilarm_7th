@@ -57,6 +57,15 @@ case $? in
 esac
 say "/harvest 서버 준비 완료"
 
+# Start the OMX pre-scan now, while Pinky launches and runs its checks.
+# nilarm-start must then not ask again: a second request restarts the scan.
+say "로봇팔 prescan 시작 (Pinky 준비와 동시에 스캔)"
+if laptop prescan 30; then
+    export NILARM_PRESCAN=0
+else
+    say "prescan 요청 실패: Pinky 점검 후 nilarm-start가 다시 요청합니다"
+fi
+
 say "Pinky competition launch 시작"
 say "prescan 요청 및 주행 안전 게이트 대기"
 # /harvest was just restarted above: skip nilarm-start's second SSH ensure

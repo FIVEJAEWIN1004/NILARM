@@ -312,7 +312,7 @@ def test_competition_enables_requested_direct_paths():
     assert speed.DIRECT_NEXT_TARGET_FROM_BIN_HOVER
     assert not speed.ENABLE_PRECOMPUTED_HARVEST_PLANS
     assert not speed.ENABLE_JOINT_COST_TARGET_ORDER
-    assert not speed.ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE
+    assert speed.ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE  # Pinky leaves at hover
     assert speed.DIRECT_HOVER_BYPASS_APPROACH_DELTA_GUARD
 
 
