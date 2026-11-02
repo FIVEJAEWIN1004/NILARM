@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Measure and save one scan angle's residual XY correction safely.
+"""Measure and save one scan angle's residual XYZ correction safely.
 
 The arm detects one pumpkin at a selected joint1 scan angle, approaches only
-to 30 mm above the planned grasp pose, and lets the operator jog in physical
-directions (toward/away from the base and base-view left/right).  The gripper
-is never operated.  SAVE stores the resulting correction for that one angle;
+to 30 mm above the planned grasp pose, then requires a separate confirmation
+before reaching the currently calibrated grasp height.  The operator can jog
+in physical XY directions and vertically.  The gripper is never operated.
+SAVE stores the resulting XYZ correction for that one angle;
 pumpkin_multiangle_approach_validation.py loads it automatically.
 """
 
@@ -25,12 +26,35 @@ from .. import pumpkin_multiangle_approach_validation as multi
 
 DEFAULT_STEP_M = 0.005
 SMALL_STEP_M = 0.002
+Z_STEP_M = 0.002
 MAX_TOTAL_JOG_M = 0.030
+MAX_TOTAL_Z_JOG_M = 0.030
 CALIBRATION_SPEED_MULTIPLIER = 2.0
 READY_DURATION_SEC = 5.0
 JOG_DURATION_SEC = 3.0
 MAX_JOG_SINGLE_JOINT_DEG = 12.0
 MAX_JOG_TOTAL_JOINT_DEG = 30.0
+CALIBRATION_OFFSETS_DEG = (-140, -110, -80, -50, 70, 100, 130)
+
+
+def ask_calibration_offset():
+    """Ask for one of the seven angles used by the competition scan."""
+    allowed = ", ".join(f"{value:+d}" for value in CALIBRATION_OFFSETS_DEG)
+    print("\n보정할 최종 스캔 offset을 입력하세요.")
+    print(f"입력 가능: {allowed}")
+    while True:
+        answer = input("offset [deg] (종료 Q): ").strip()
+        if answer.upper() == "Q":
+            return None
+        try:
+            value = int(answer)
+        except ValueError:
+            print("각도를 정수로 입력하세요.")
+            continue
+        if value not in CALIBRATION_OFFSETS_DEG:
+            print("최종 스캔에 사용하는 7개 각도 중 하나를 입력하세요.")
+            continue
+        return float(value)
 
 
 def calibration_duration(normal_duration_sec):
@@ -89,17 +113,18 @@ def physical_directions(world_xy):
 
 
 def print_controls(step_m):
-    print("\n========== 30mm 상공 XY 미세조정 ==========")
+    print("\n========== 파지 위치 XYZ 미세조정 ==========")
     print(f"현재 한 번 이동량: {step_m * 1000:.0f} mm")
     print("TOWARD_BASE : 로봇 베이스 쪽")
     print("AWAY_BASE   : 로봇 베이스에서 멀어지는 쪽")
     print("BASE_LEFT   : 베이스에서 그리퍼를 볼 때 왼쪽")
     print("BASE_RIGHT  : 베이스에서 그리퍼를 볼 때 오른쪽")
+    print("Z_UP / Z_DOWN : 그리퍼를 항상 2mm 위 / 아래로 이동")
     print("STEP_2 / STEP_5 : 한 번 이동량 2mm / 5mm")
     print("UNDO        : 직전 미세이동 취소")
     print("SAVE        : 이 촬영각의 보정값 저장 후 복귀")
     print("Q           : 저장하지 않고 복귀")
-    print("그리퍼 동작 없음 / 30mm 아래로 내려가지 않음")
+    print("그리퍼 동작 없음 / Z 총 추가조정은 위·아래 30mm 이내")
     print("============================================")
 
 
@@ -131,7 +156,14 @@ def load_store():
     return data
 
 
-def save_residual(commanded_deg, measured_deg, pixel, local_residual, world_residual):
+def save_residual(
+    commanded_deg,
+    measured_deg,
+    pixel,
+    local_residual,
+    world_residual,
+    grasp_z_residual_m,
+):
     data = load_store()
     key = str(int(round(commanded_deg)))
     previous = data["angles"].get(key)
@@ -144,6 +176,8 @@ def save_residual(commanded_deg, measured_deg, pixel, local_residual, world_resi
         "local_residual_mm": [float(v * 1000.0) for v in local_residual],
         "world_residual_m": [float(v) for v in world_residual],
         "world_residual_mm": [float(v * 1000.0) for v in world_residual],
+        "grasp_z_residual_m": float(grasp_z_residual_m),
+        "grasp_z_residual_mm": float(grasp_z_residual_m * 1000.0),
         "replaces_saved_at_utc": (
             previous.get("saved_at_utc") if isinstance(previous, dict) else None
         ),
@@ -212,14 +246,15 @@ def main():
     try:
         calibration = base.load_calibrations()
         existing_residuals = multi.load_angle_residuals()
+        saved_z_residuals = multi.load_angle_z_residuals()
         model_path = base.find_model_path()
         print(f"YOLO 모델: {model_path}")
         model = YOLO(str(model_path))
         base.validate_model(model)
         cap = base.open_camera()
 
-        print("이 프로그램은 촬영각 하나의 XY 잔여오차를 측정합니다.")
-        print("그리퍼는 작동하지 않으며 30mm 상공까지만 접근합니다.")
+        print("이 프로그램은 촬영각 하나의 XYZ 잔여오차를 측정합니다.")
+        print("그리퍼는 작동하지 않습니다. 확인 후 실제 파지 높이까지 접근합니다.")
         print("OMX 로봇팔에 연결합니다.")
         arm = OmxFollower().connect()
         print("각도별 보정 이동 속도: 기존 대비 2.0배")
@@ -234,12 +269,21 @@ def main():
         time.sleep(base.SETTLE_TIME_SEC)
         at_central_pose = True
 
-        commanded_offset_deg = multi.ask_offset()
+        commanded_offset_deg = ask_calibration_offset()
         if commanded_offset_deg is None:
             raise multi.TestCancelled
         target_joint1_deg = base_joint1_deg + commanded_offset_deg
         if abs(target_joint1_deg) > multi.JOINT1_SAFE_LIMIT_DEG:
             raise ValueError("선택한 촬영 자세가 joint1 안전 한계를 벗어납니다.")
+        angle_key = int(round(commanded_offset_deg))
+        existing_z_offset = saved_z_residuals.get(
+            angle_key,
+            multi.DEFAULT_ANGLE_GRASP_Z_OFFSET_M.get(angle_key, 0.0),
+        )
+        print(
+            f"{angle_key:+d}도 기존 Z 보정: "
+            f"{existing_z_offset * 1000:+.1f} mm"
+        )
 
         view_joints = camera_joints.copy()
         view_joints[0] = np.radians(target_joint1_deg)
@@ -403,9 +447,34 @@ def main():
             joints_stages[1],
             duration=calibration_duration(multi.LOWER_MOVE_DURATION_SEC),
         )
+        confirmation = input(
+            "그리퍼를 작동하지 않고 기존 Z가 적용된 실제 파지 높이로 "
+            "내리려면 MOVE_GRASP 입력: "
+        ).strip()
+        if confirmation != "MOVE_GRASP":
+            multi.return_from_stage_to_central(
+                arm, calibration, prealign_joints, joints_stages, 1
+            )
+            at_central_pose = True
+            return
+        grasp_xyz = make_xyz(
+            calibration, baseline_world_xy, existing_z_offset
+        )
+        grasp_joints = solve_pose(
+            arm,
+            grasp_xyz,
+            joints_stages[1],
+            calibration["pitch_rad"],
+            calibration["roll_rad"],
+        )
+        arm.move_joints(
+            grasp_joints,
+            duration=calibration_duration(multi.LOWER_MOVE_DURATION_SEC),
+        )
         safe_for_automatic_return = True
         current_xy = baseline_world_xy.copy()
-        current_joints = joints_stages[1].copy()
+        current_z_offset = float(existing_z_offset)
+        current_joints = grasp_joints.copy()
         history = []
         step_m = DEFAULT_STEP_M
         print_controls(step_m)
@@ -420,7 +489,8 @@ def main():
                 f"world dx={world_jog[0] * 1000:+.1f}, "
                 f"dy={world_jog[1] * 1000:+.1f} mm | "
                 f"저장 예정 local=({total_local[0] * 1000:+.1f}, "
-                f"{total_local[1] * 1000:+.1f}) mm"
+                f"{total_local[1] * 1000:+.1f}) mm, "
+                f"Z={current_z_offset * 1000:+.1f} mm"
             )
             command = input("명령: ").strip().upper()
 
@@ -439,11 +509,13 @@ def main():
                     selected,
                     total_local,
                     multi.rotate_xy(total_local, measured_offset_deg),
+                    current_z_offset,
                 )
                 print(
                     f"{commanded_offset_deg:+.0f}도 보정 저장: "
                     f"local dx={record['local_residual_mm'][0]:+.1f}, "
-                    f"dy={record['local_residual_mm'][1]:+.1f} mm"
+                    f"dy={record['local_residual_mm'][1]:+.1f} mm, "
+                    f"z={record['grasp_z_residual_mm']:+.1f} mm"
                 )
                 break
             if command == "Q":
@@ -454,16 +526,26 @@ def main():
                 if not history:
                     print("취소할 미세이동이 없습니다.")
                     continue
-                candidate_xy, candidate_joints = history.pop()
+                candidate_xy, candidate_z_offset, candidate_joints = history.pop()
             else:
-                directions = physical_directions(current_xy)
-                direction = directions.get(command)
-                if direction is None:
-                    print("표시된 명령 중 하나를 입력하세요.")
-                    continue
-                candidate_xy = current_xy + step_m * direction
+                candidate_xy = current_xy.copy()
+                candidate_z_offset = current_z_offset
+                if command == "Z_UP":
+                    candidate_z_offset += Z_STEP_M
+                elif command == "Z_DOWN":
+                    candidate_z_offset -= Z_STEP_M
+                else:
+                    directions = physical_directions(current_xy)
+                    direction = directions.get(command)
+                    if direction is None:
+                        print("표시된 명령 중 하나를 입력하세요.")
+                        continue
+                    candidate_xy = current_xy + step_m * direction
                 if np.linalg.norm(candidate_xy - baseline_world_xy) > MAX_TOTAL_JOG_M + 1e-9:
                     print("[이동 금지] 이번 실행의 총 미세이동은 30mm까지만 허용합니다.")
+                    continue
+                if abs(candidate_z_offset - existing_z_offset) > MAX_TOTAL_Z_JOG_M + 1e-9:
+                    print("[이동 금지] 이번 실행의 Z 추가조정은 30mm까지만 허용합니다.")
                     continue
 
                 candidate_reference = multi.rotate_xy(
@@ -479,7 +561,9 @@ def main():
                     )
                     continue
 
-                candidate_xyz = make_xyz(calibration, candidate_xy, 0.030)
+                candidate_xyz = make_xyz(
+                    calibration, candidate_xy, candidate_z_offset
+                )
                 try:
                     candidate_joints = solve_pose(
                         arm,
@@ -500,11 +584,14 @@ def main():
                         f"max={max_delta:.1f}, total={total_delta:.1f}도"
                     )
                     continue
-                history.append((current_xy.copy(), current_joints.copy()))
+                history.append((
+                    current_xy.copy(), current_z_offset, current_joints.copy()
+                ))
 
             print(
-                f"{command}: 목표 XY=({candidate_xy[0]:.4f}, "
-                f"{candidate_xy[1]:.4f}) m"
+                f"{command}: 목표 XYZ=({candidate_xy[0]:.4f}, "
+                f"{candidate_xy[1]:.4f}, Z보정 "
+                f"{candidate_z_offset * 1000:+.1f}mm)"
             )
             safe_for_automatic_return = False
             arm.move_joints(
@@ -512,6 +599,7 @@ def main():
                 duration=calibration_duration(JOG_DURATION_SEC),
             )
             current_xy = candidate_xy
+            current_z_offset = candidate_z_offset
             current_joints = candidate_joints
             safe_for_automatic_return = True
 

@@ -7,6 +7,9 @@ from types import SimpleNamespace
 from arm_control_pkg.pumpkin_harvest import (
     pumpkin_full_auto_orange_harvest_to_bin_v2 as harvest,
 )
+from arm_control_pkg.pumpkin_harvest import (
+    pumpkin_multiangle_approach_validation as multi,
+)
 
 
 def make_target():
@@ -31,7 +34,8 @@ def make_cluster(*angles):
     ("angle", "expected_offset"),
     [(-140, -0.025), (70, 0.005), (130, -0.018), (-110, 0.0)],
 )
-def test_angle_grasp_z_offset(angle, expected_offset):
+def test_angle_grasp_z_offset(angle, expected_offset, monkeypatch):
+    monkeypatch.setattr(multi, "load_angle_z_residuals", lambda: {})
     original = make_target()
     adjusted = harvest.apply_angle_grasp_z_offset(original, angle)
 
@@ -53,6 +57,21 @@ def test_angle_grasp_z_offset(angle, expected_offset):
     )
 
 
+def test_saved_z_residual_overrides_legacy_value(tmp_path, monkeypatch):
+    path = tmp_path / "residual.json"
+    path.write_text(
+        '{"method":"per_angle_manual_world_jog_v1","angles":'
+        '{"-140":{"local_residual_m":[0.0,0.0],'
+        '"grasp_z_residual_m":-0.031}}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(multi, "ANGLE_RESIDUAL_PATH", path)
+
+    adjusted = harvest.apply_angle_grasp_z_offset(make_target(), -140)
+
+    assert adjusted["angle_grasp_z_offset_m"] == pytest.approx(-0.031)
+
+
 @pytest.mark.parametrize(
     ("observed_angles", "selected_angle", "expected_angle"),
     [
@@ -69,7 +88,9 @@ def test_unique_calibrated_observation_selects_height_correction(
     observed_angles,
     selected_angle,
     expected_angle,
+    monkeypatch,
 ):
+    monkeypatch.setattr(multi, "load_angle_z_residuals", lambda: {})
     cluster = make_cluster(*observed_angles)
     assert harvest.select_grasp_z_correction_angle(
         cluster,

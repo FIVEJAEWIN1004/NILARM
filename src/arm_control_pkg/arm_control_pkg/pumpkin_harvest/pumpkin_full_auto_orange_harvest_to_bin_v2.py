@@ -41,21 +41,22 @@ SERVO_PROFILE_ACCELERATION_DPS2 = 215.0
 QUINTIC_PEAK_VELOCITY_FACTOR = 1.875
 QUINTIC_PEAK_ACCELERATION_FACTOR = 5.7735
 SAFE_APPROACH_SPEEDUP = 2.0
-HELD_BIN_MOVE_SPEEDUP = 1.3
+HELD_BIN_MOVE_SPEEDUP = 2.0
 SAFE_APPROACH_PREALIGN_MIN_DURATION_SEC = 1.2
 SAFE_APPROACH_HIGH_MIN_DURATION_SEC = 1.4
 LIFT_STEP_MIN_DURATION_SEC = 0.8
 LIFT_EARLY_SPEEDUP = 1.7
 LIFT_EARLY_MIN_DURATION_SEC = 0.50
-HELD_FOLD_MIN_DURATION_SEC = 1.4
-HELD_BIN_ROTATION_MIN_DURATION_SEC = 1.5
+HELD_FOLD_MIN_DURATION_SEC = 1.0
+HELD_BIN_ROTATION_MIN_DURATION_SEC = 1.0
 HELD_MOVE_SPEEDUP = 2.0
 FINAL_APPROACH_DURATIONS_SEC = (2.5, 2.0, 2.0)
 DIRECT_FINAL_APPROACH_SPEEDUP = 2.0
 DIRECT_FINAL_APPROACH_MIN_DURATION_SEC = 0.5
 GRIPPER_CLOSE_DURATION_SEC = 2.0
-# The lift passes +10/+30 mm without stopping; at +80 mm only joints that
-# keep their direction into the fold continue, at no more than this speed.
+# Lift approximately 40 mm clear of the floor, then pass that waypoint without
+# stopping as the arm folds in the pumpkin's direction.
+LIFT_TO_FOLD_VIA_CLEARANCE_M = 0.040
 LIFT_TO_FOLD_VIA_SPEED_DPS = 5.0
 
 _BIN_HOVER_JOINTS: np.ndarray | None = None
@@ -99,8 +100,8 @@ def direct_lift_to_escape_enabled() -> bool:
     return False
 
 
-def plan_direct_lift_to_escape(arm, actual_start, joints_stages):
-    """Validate all lift IK stages, then plan grasp -> +80 mm directly."""
+def plan_direct_lift_to_escape(arm, actual_start, joints_stages, prealign):
+    """Plan grasp -> approximately +40 mm -> folded without stopping."""
     start = checked_vector(actual_start, 5, "직접 리프트 실제 시작 관절")
     lift_targets = []
     previous = start
@@ -133,8 +134,14 @@ def plan_direct_lift_to_escape(arm, actual_start, joints_stages):
         ))
         previous = target
 
-    final_target = lift_targets[-1]
-    delta_deg = float(np.max(np.abs(np.degrees(final_target - start))))
+    plus30, plus80 = lift_targets[1], lift_targets[2]
+    ratio = ((LIFT_TO_FOLD_VIA_CLEARANCE_M - 0.030) / (0.080 - 0.030))
+    via40 = arm.check_limits(plus30 + ratio * (plus80 - plus30), plus30)
+    folded = arm.check_limits(
+        checked_vector(prealign, 5, "수확 방향 접힘"), via40
+    )
+
+    delta_deg = float(np.max(np.abs(np.degrees(via40 - start))))
     requested = sum(staged_durations) / 2.0
     velocity_floor = (
         delta_deg * QUINTIC_PEAK_VELOCITY_FACTOR
@@ -150,18 +157,36 @@ def plan_direct_lift_to_escape(arm, actual_start, joints_stages):
         acceleration_floor,
         LIFT_STEP_MIN_DURATION_SEC,
     )
-    rounded, _velocities, _coefficients = joint_trajectory.plan(
+    fold_duration = max(
+        HELD_FOLD_MIN_DURATION_SEC,
+        duration_with_safe_speedup(
+            via40,
+            folded,
+            min_duration=HELD_FOLD_MIN_DURATION_SEC,
+            speedup=HELD_BIN_MOVE_SPEEDUP,
+        ),
+    )
+    requested_fold = held_segment_duration_2x(
+        via40,
+        folded,
+        current_duration=fold_duration,
+        minimum_duration=HELD_FOLD_MIN_DURATION_SEC,
+    )
+    rounded, velocities, _coefficients = joint_trajectory.plan(
         start,
-        [final_target],
-        [duration],
-        [],
+        [via40, folded],
+        [duration, requested_fold],
+        [LIFT_TO_FOLD_VIA_SPEED_DPS],
         float(getattr(arm, "hz", 100.0)),
     )
+    if np.allclose(velocities[1], 0.0):
+        raise ValueError("+40mm 연결점에서 전 관절이 정지하는 경로입니다.")
     return {
-        "target": final_target,
-        "duration": rounded[0],
+        "segments": [(via40, rounded[0]), (folded, rounded[1])],
+        "via_speed_caps_dps": (LIFT_TO_FOLD_VIA_SPEED_DPS,),
         "previous_total_duration": sum(staged_durations),
         "requested_total_duration": requested,
+        "actual_total_duration": sum(rounded),
     }
 
 
@@ -490,17 +515,16 @@ def cluster_has_view_angle(cluster: scan.PumpkinCluster, angle: int) -> bool:
 
 # Positive Z is upward.  These competition-only residuals adjust the complete
 # approach stack and final grasp height for the selected observation angle.
-ANGLE_GRASP_Z_OFFSET_M = {
-    -140: -0.025,  # 25 mm farther down (raised 5 mm)
-    70: 0.005,    # 5 mm less down
-    130: -0.018,  # 18 mm farther down (raised 2 mm)
-}
+ANGLE_GRASP_Z_OFFSET_M = scan.multi.DEFAULT_ANGLE_GRASP_Z_OFFSET_M
 
 
 def apply_angle_grasp_z_offset(target: dict, commanded_offset_deg: float) -> dict:
     """Return a copied target with the verified per-angle grasp-Z residual."""
     angle = int(round(float(commanded_offset_deg)))
-    z_offset = ANGLE_GRASP_Z_OFFSET_M.get(angle, 0.0)
+    saved_z_offsets = scan.multi.load_angle_z_residuals()
+    z_offset = saved_z_offsets.get(
+        angle, ANGLE_GRASP_Z_OFFSET_M.get(angle, 0.0)
+    )
     result = dict(target)
     result["angle_grasp_z_offset_m"] = z_offset
     result["planned_grasp_z"] = float(target["planned_grasp_z"]) + z_offset
@@ -520,8 +544,10 @@ def select_grasp_z_correction_angle(
     observed_angles = {
         int(round(item.commanded_offset_deg)) for item in cluster.observations
     }
+    calibrated_angles = set(ANGLE_GRASP_Z_OFFSET_M)
+    calibrated_angles.update(scan.multi.load_angle_z_residuals())
     calibrated_observations = observed_angles.intersection(
-        ANGLE_GRASP_Z_OFFSET_M
+        calibrated_angles
     )
     if len(calibrated_observations) == 1:
         return calibrated_observations.pop()
@@ -755,17 +781,22 @@ def move_held_pumpkin_to_bin(
     if use_direct_lift:
         try:
             direct_plan = plan_direct_lift_to_escape(
-                arm, np.asarray(arm.joints(), dtype=float), joints_stages
+                arm,
+                np.asarray(arm.joints(), dtype=float),
+                joints_stages,
+                prealign_joints,
             )
             print(
-                "[직접 리프트] +10/+30mm 정지를 생략하고 +80mm "
-                "상공 탈출 자세로 이동합니다. "
+                "[연속 리프트·접힘] 약 +40mm를 정지 없이 통과해 "
+                "수확 방향 접힘 자세로 이동합니다. "
                 f"기존 {direct_plan['previous_total_duration']:.2f}초 / "
                 f"요청 {direct_plan['requested_total_duration']:.2f}초 / "
-                f"적용 {direct_plan['duration']:.2f}초"
+                f"전체 적용 {direct_plan['actual_total_duration']:.2f}초"
             )
-            arm.move_joints(
-                direct_plan["target"], duration=direct_plan["duration"]
+            joint_trajectory.move_joints_continuous(
+                arm,
+                direct_plan["segments"],
+                direct_plan["via_speed_caps_dps"],
             )
         except (AttributeError, TypeError, ValueError, RuntimeError) as error:
             print(
@@ -807,16 +838,17 @@ def move_held_pumpkin_to_bin(
             speedup=HELD_BIN_MOVE_SPEEDUP,
         ),
     )
-    print("[운반 준비] +10/+30/+80 mm를 순서대로 완료한 뒤 팔을 접습니다.")
-    arm.move_joints(
-        prealign_joints,
-        duration=held_segment_duration_2x(
-            joints_stages[0],
+    if not use_direct_lift:
+        print("[운반 준비] +10/+30/+80 mm를 순서대로 완료한 뒤 팔을 접습니다.")
+        arm.move_joints(
             prealign_joints,
-            current_duration=current_fold_duration,
-            minimum_duration=HELD_FOLD_MIN_DURATION_SEC,
-        ),
-    )
+            duration=held_segment_duration_2x(
+                joints_stages[0],
+                prealign_joints,
+                current_duration=current_fold_duration,
+                minimum_duration=HELD_FOLD_MIN_DURATION_SEC,
+            ),
+        )
 
     print("[운반] 중앙 기본 각도를 거치지 않고 접힌 상태로 적재함 방향에 이동합니다.")
     current_rotation_duration = max(

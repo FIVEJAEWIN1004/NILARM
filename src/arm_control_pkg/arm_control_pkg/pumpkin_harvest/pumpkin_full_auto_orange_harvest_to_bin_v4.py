@@ -38,7 +38,7 @@ SCAN_STEP_DURATION_FACTOR = (
 DESCENT_DURATION_FACTOR = 0.90
 MIN_ROTATION_DURATION_SEC = 2.0
 
-BIN_HOVER_MIN_DURATION_SEC = 1.5
+BIN_HOVER_MIN_DURATION_SEC = 1.0
 BIN_DESCENT_MIN_DURATION_SEC = 2.0
 OPEN_GRIPPER_RISE_MIN_DURATION_SEC = 1.9
 # ㉑ cleanup keeps the fold on the shared 21.9 deg/s safety limit.
@@ -52,9 +52,17 @@ DIRECT_LAST_FOLD_TO_PARK = True
 DIRECT_LAST_HOVER_TO_PARK = True
 BIN_FOLD_DURATION_SEC = 8.0 * TRANSIT_DURATION_FACTOR
 NEXT_TARGET_GRIPPER_RESTORE_DURATION_SEC = 3.0 / 1.6
+# After releasing a pumpkin, restore the gripper to its default width at twice
+# the current speed. This applies to both intermediate and final pumpkins.
+BIN_GRIPPER_RESTORE_EXTRA_SPEEDUP = 2.0
 NEXT_TARGET_FOLD_SPEEDUP = 1.6
 BIN_SETTLE_SEC = 0.7
-BIN_RELEASE_GRIPPER_SPEEDUP = 1.5
+# Short pause after an arm-motion waypoint.  The separate 0.7 s fruit-release
+# wait remains unchanged so the pumpkin can clear the gripper.
+BIN_WAYPOINT_SETTLE_SEC = 0.3
+# The previous release was already 1.5x the base 3.0 s.  Double that current
+# speed: 3.0 s / 3.0 = 1.0 s.
+BIN_RELEASE_GRIPPER_SPEEDUP = 3.0
 BIN_RELEASE_GRIPPER_DURATION_SEC = (
     scan.grasp.GRIPPER_OPEN_DURATION_SEC / BIN_RELEASE_GRIPPER_SPEEDUP
 )
@@ -65,7 +73,7 @@ DIRECT_NEXT_TARGET_FROM_BIN_HOVER = True
 # name/meaning on Pinky (pinky_camera_drive.camera_straight_drive). False =
 # Pinky departs on the final /harvest result as before.
 ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE = False
-DIRECT_HOVER_BYPASS_APPROACH_DELTA_GUARD = False
+DIRECT_HOVER_BYPASS_APPROACH_DELTA_GUARD = True
 
 # Pure pre-planning is enabled; feedback/collision-dependent experiments stay
 # opt-in until they are verified on the real arm and camera.
@@ -542,7 +550,9 @@ def deposit_open_then_rise(
             minimum_duration=BIN_HOVER_MIN_DURATION_SEC,
         ),
     )
-    settle_after_arm_move(arm, v2._BIN_HOVER_JOINTS, BIN_SETTLE_SEC)
+    settle_after_arm_move(
+        arm, v2._BIN_HOVER_JOINTS, BIN_WAYPOINT_SETTLE_SEC
+    )
 
     print("[적재] 새로 저장한 놓기 자세로 하강합니다.")
     arm.move_joints(
@@ -553,7 +563,9 @@ def deposit_open_then_rise(
             min_duration=BIN_DESCENT_MIN_DURATION_SEC,
         ),
     )
-    settle_after_arm_move(arm, v2._BIN_DROP_JOINTS, BIN_SETTLE_SEC)
+    settle_after_arm_move(
+        arm, v2._BIN_DROP_JOINTS, BIN_WAYPOINT_SETTLE_SEC
+    )
 
     print("[적재] 그리퍼를 열어 주황 호박을 놓습니다.")
     arm.gripper(
@@ -575,7 +587,9 @@ def deposit_open_then_rise(
             min_duration=OPEN_GRIPPER_RISE_MIN_DURATION_SEC,
         ),
     )
-    settle_after_arm_move(arm, v2._BIN_HOVER_JOINTS, BIN_SETTLE_SEC)
+    settle_after_arm_move(
+        arm, v2._BIN_HOVER_JOINTS, BIN_WAYPOINT_SETTLE_SEC
+    )
 
     if not is_last and DIRECT_NEXT_TARGET_FROM_BIN_HOVER:
         global _direct_hover_pending
@@ -605,8 +619,10 @@ def deposit_open_then_rise(
         duration=(
             LAST_PUMPKIN_GRIPPER_RESTORE_DURATION_SEC
             / LAST_PUMPKIN_CLEANUP_SPEEDUP
+            / BIN_GRIPPER_RESTORE_EXTRA_SPEEDUP
             if is_last
             else NEXT_TARGET_GRIPPER_RESTORE_DURATION_SEC
+            / BIN_GRIPPER_RESTORE_EXTRA_SPEEDUP
         ),
         stall_guard=False,
         wait=True,

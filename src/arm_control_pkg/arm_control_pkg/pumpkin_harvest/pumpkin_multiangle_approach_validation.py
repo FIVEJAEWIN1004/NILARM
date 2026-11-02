@@ -42,6 +42,13 @@ JOINT1_ROTATION_SIGN = 1.0
 ANGLE_RESIDUAL_PATH = Path(__file__).with_name(
     "pumpkin_multiangle_xy_residual.json"
 )
+# Existing competition Z corrections.  New per-angle calibration records in
+# ANGLE_RESIDUAL_PATH override these values one angle at a time.
+DEFAULT_ANGLE_GRASP_Z_OFFSET_M = {
+    -140: -0.025,
+    70: 0.005,
+    130: -0.018,
+}
 
 APPROACH_CLEARANCES_M = (0.080, 0.030)
 HIGH_MOVE_DURATION_SEC = 12.0
@@ -84,6 +91,30 @@ def load_angle_residuals(path: Path | None = None) -> dict[int, np.ndarray]:
             raise ValueError(f"{angle:+d}도 잔여보정이 50 mm를 초과합니다.")
         residuals[angle] = value
     print(f"각도별 XY 보정 {len(residuals)}개를 불러왔습니다: {path}")
+    return residuals
+
+
+def load_angle_z_residuals(path: Path | None = None) -> dict[int, float]:
+    """Load optional verified grasp-Z residuals without requiring migration."""
+    if path is None:
+        path = ANGLE_RESIDUAL_PATH
+    if not path.is_file():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    angles = data.get("angles")
+    if data.get("method") != "per_angle_manual_world_jog_v1" or not isinstance(
+        angles, dict
+    ):
+        raise ValueError(f"각도별 XYZ 보정 파일 형식이 다릅니다: {path}")
+    residuals = {}
+    for key, record in angles.items():
+        angle = int(key)
+        if not isinstance(record, dict) or "grasp_z_residual_m" not in record:
+            continue
+        value = float(record["grasp_z_residual_m"])
+        if not math.isfinite(value) or abs(value) > 0.050:
+            raise ValueError(f"{angle:+d}도 Z 잔여보정이 50 mm를 초과합니다.")
+        residuals[angle] = value
     return residuals
 
 

@@ -304,16 +304,16 @@ def test_continuous_approach_100hz_limits_and_high_waypoint_velocity():
     )
 
 
-def test_competition_enables_only_continuous_approach_experiment():
-    assert speed.ENABLE_CONTINUOUS_APPROACH_TO_GRASP
+def test_competition_enables_requested_direct_paths():
+    assert not speed.ENABLE_CONTINUOUS_APPROACH_TO_GRASP
     assert speed.ENABLE_DIRECT_LIFT_TO_ESCAPE
-    assert not speed.ENABLE_DIRECT_FINAL_APPROACH
+    assert speed.ENABLE_DIRECT_FINAL_APPROACH
     assert not speed.ENABLE_CONTINUOUS_HELD_TRANSPORT
-    assert not speed.DIRECT_NEXT_TARGET_FROM_BIN_HOVER
+    assert speed.DIRECT_NEXT_TARGET_FROM_BIN_HOVER
     assert not speed.ENABLE_PRECOMPUTED_HARVEST_PLANS
     assert not speed.ENABLE_JOINT_COST_TARGET_ORDER
     assert not speed.ENABLE_PINKY_DEPARTURE_AFTER_LAST_RISE
-    assert not speed.DIRECT_HOVER_BYPASS_APPROACH_DELTA_GUARD
+    assert speed.DIRECT_HOVER_BYPASS_APPROACH_DELTA_GUARD
 
 
 def test_continuous_safe_approach_keeps_both_waypoints(monkeypatch):

@@ -122,7 +122,7 @@ def test_lift_and_bin_transport_keep_staged_waypoints_and_safe_2x(monkeypatch):
         np.testing.assert_array_equal(target, expected)
 
     starts = [grasp, plus10, plus30, plus80, prealign]
-    minimums = [0.5, 0.5, 0.8, 1.4, 1.5]
+    minimums = [0.5, 0.5, 0.8, 1.0, 1.0]
     for start, (target, duration), minimum in zip(
         starts, arm.moves, minimums
     ):
@@ -165,27 +165,18 @@ def test_direct_lift_skips_intermediate_commands_and_stops_at_escape(
     arm = RecordingArm(grasp)
 
     expected_plan = transport.plan_direct_lift_to_escape(
-        arm, grasp, stages
+        arm, grasp, stages, prealign
     )
     transport.move_held_pumpkin_to_bin(arm, prealign, stages)
 
-    assert len(arm.moves) == 3
-    np.testing.assert_array_equal(arm.moves[0][0], plus80)
-    assert all(
-        not np.array_equal(target, intermediate)
-        for target, _duration in arm.moves
-        for intermediate in (plus10, plus30)
-    )
-    assert arm.moves[0][1] == pytest.approx(expected_plan["duration"])
-    delta = np.max(np.abs(np.degrees(plus80 - grasp)))
-    assert delta / arm.moves[0][1] * 1.875 <= SERVO_PROFILE_VELOCITY_DPS
-    assert (
-        delta / arm.moves[0][1] ** 2
-        * transport.QUINTIC_PEAK_ACCELERATION_FACTOR
-        <= SERVO_PROFILE_ACCEL_DPS2
-    )
-    np.testing.assert_array_equal(arm.moves[1][0], prealign)
-    np.testing.assert_array_equal(arm.moves[2][0], folded)
+    assert len(arm.moves) == 1
+    np.testing.assert_array_equal(arm.moves[0][0], folded)
+    assert arm.streamed
+    np.testing.assert_allclose(arm.streamed[-1], prealign)
+    via40 = expected_plan["segments"][0][0]
+    expected_via40 = plus30 + 0.2 * (plus80 - plus30)
+    np.testing.assert_allclose(via40, expected_via40)
+    assert not any(np.array_equal(point, plus80) for point in arm.streamed)
 
 
 def test_direct_lift_plan_failure_restores_all_staged_waypoints(monkeypatch):
@@ -223,9 +214,10 @@ def test_held_floors():
     assert transport.LIFT_STEP_MIN_DURATION_SEC == pytest.approx(0.8)
     assert transport.LIFT_EARLY_SPEEDUP == pytest.approx(1.7)
     assert transport.LIFT_EARLY_MIN_DURATION_SEC == pytest.approx(0.5)
-    assert transport.HELD_FOLD_MIN_DURATION_SEC == pytest.approx(1.4)
-    assert transport.HELD_BIN_ROTATION_MIN_DURATION_SEC == pytest.approx(1.5)
-    assert speed.BIN_HOVER_MIN_DURATION_SEC == pytest.approx(1.5)
+    assert transport.HELD_BIN_MOVE_SPEEDUP == pytest.approx(2.0)
+    assert transport.HELD_FOLD_MIN_DURATION_SEC == pytest.approx(1.0)
+    assert transport.HELD_BIN_ROTATION_MIN_DURATION_SEC == pytest.approx(1.0)
+    assert speed.BIN_HOVER_MIN_DURATION_SEC == pytest.approx(1.0)
     assert speed.BIN_DESCENT_MIN_DURATION_SEC == pytest.approx(2.0)
     assert speed.OPEN_GRIPPER_RISE_MIN_DURATION_SEC == pytest.approx(1.9)
 
@@ -255,10 +247,13 @@ def test_bin_rotation_is_independent_of_safe_approach_rotation(monkeypatch):
 
     transport.move_held_pumpkin_to_bin(arm, stages[0], stages)
 
-    assert arm.moves[-1][1] == pytest.approx(1.5)
+    assert arm.moves[-1][1] == pytest.approx(1.0)
 
 
 def test_deposit_with_taught_bin_poses(monkeypatch):
+    assert speed.BIN_RELEASE_GRIPPER_SPEEDUP == pytest.approx(3.0)
+    assert speed.BIN_RELEASE_GRIPPER_DURATION_SEC == pytest.approx(1.0)
+    assert speed.BIN_GRIPPER_RESTORE_EXTRA_SPEEDUP == pytest.approx(2.0)
     monkeypatch.setattr(speed, "DIRECT_NEXT_TARGET_FROM_BIN_HOVER", False)
     monkeypatch.setattr(transport, "DROP_RAISE_M", 0.0)
     hover, drop, _drop_m = transport.load_adjusted_bin_poses()
@@ -284,7 +279,7 @@ def test_deposit_with_taught_bin_poses(monkeypatch):
         arm, {"camera_joints": camera}, default_gripper_value, False)
     assert arm.grippers == [
         (default_gripper_value, speed.BIN_RELEASE_GRIPPER_DURATION_SEC),
-        (default_gripper_value, 1.875),
+        (default_gripper_value, 0.9375),
     ]
     assert arm.gripper_calls[0] == (
         default_gripper_value,
@@ -312,13 +307,13 @@ def test_deposit_with_taught_bin_poses(monkeypatch):
     ):
         assert peak_dps(start, target, duration) <= (
             transport.SERVO_PROFILE_VELOCITY_DPS + 1e-9)
-    # ⑯d, ⑰, ⑱, ⑲ settles stay 0.7 s; gripper stays open until after ⑲.
-    assert sleeps == pytest.approx([0.7, 0.7, 0.7, 0.7])
+    # Motion waypoints pause for 0.3 s; fruit release keeps its 0.7 s wait.
+    assert sleeps == pytest.approx([0.3, 0.3, 0.7, 0.3])
     assert arm.events == [
-        "move", ("sleep", 0.7),
-        "move", ("sleep", 0.7),
+        "move", ("sleep", 0.3),
+        "move", ("sleep", 0.3),
         "release_gripper", ("sleep", 0.7),
-        "move", ("sleep", 0.7),
+        "move", ("sleep", 0.3),
         "restore_gripper", "move",
     ]
 
@@ -345,7 +340,7 @@ def test_direct_next_target_returns_at_bin_hover(monkeypatch):
     assert len(arm.moves) == 3
     np.testing.assert_array_equal(arm.moves[-1][0], hover)
     assert all(not np.array_equal(target, folded) for target, _d in arm.moves)
-    assert sleeps == pytest.approx([0.7, 0.7, 0.7, 0.7])
+    assert sleeps == pytest.approx([0.3, 0.3, 0.7, 0.3])
     assert speed._direct_hover_pending
 
 
@@ -408,7 +403,7 @@ def test_last_pumpkin_cleanup_uses_safe_dedicated_sequence(
     assert speed.LAST_PUMPKIN_CLEANUP_SPEEDUP == pytest.approx(3.0)
     assert arm.grippers == [
         (default_gripper_value, speed.BIN_RELEASE_GRIPPER_DURATION_SEC),
-        (default_gripper_value, 0.5),
+        (default_gripper_value, 0.25),
     ]
     assert arm.gripper_calls[0][2] == {
         "stall_guard": True,
