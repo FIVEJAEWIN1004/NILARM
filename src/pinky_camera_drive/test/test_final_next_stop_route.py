@@ -47,7 +47,8 @@ def make_route_node():
     )
     node.log = Log()
     node.get_logger = lambda: node.log
-    node._publish_media = lambda *args: None
+    node.media = []
+    node._publish_media = lambda publisher, text: node.media.append(text)
     node._normalize_angle = Drive._normalize_angle
     node._build_bezier_trajectory = Drive._build_bezier_trajectory.__get__(node)
     for name in ('_start_next_stop_from_station', '_start_next_stop_leg',
@@ -118,6 +119,8 @@ def test_ninth_stop_waits_then_runs_second_curve_from_actual_pose():
     node._control_next_stop_wait(Clock(13.5))
     assert node.state == drive.DriveState.STATION_TO_NEXT_STOP
     assert node.next_stop_leg == 2
+    # LCD keeps the harvest result: no IMAGE switch on ⑨ or ⑩ departure.
+    assert node.media == []
     # Facing -90deg: forward 0.13 is -y, right 0.13 is -x.
     assert node.next_stop_target_x == pytest.approx(0.29 - 0.13)
     assert node.next_stop_target_y == pytest.approx(-0.29 - 0.13)

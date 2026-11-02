@@ -1652,7 +1652,7 @@ class CameraStraightDrive(Node):
         self.curve_yaw_error = self._normalize_angle(
             self.curve_target_yaw - self.current_yaw)
         self.state = DriveState.STATION_TO_NEXT_STOP
-        self._publish_media(self.display_mode_pub, 'IMAGE')
+        # No display change: the LCD keeps the harvest result through the end.
         label = (
             'STATION departure started'
             if self.next_stop_leg == 1 else '⑩ second curve started')
