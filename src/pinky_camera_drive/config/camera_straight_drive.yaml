@@ -95,6 +95,11 @@ camera_straight_drive:
     next_stop2_target_yaw_deg: -90.0
     next_stop2_start_handle_m: 0.094
     next_stop2_end_handle_m: 0.094
+    # ⑪ after ⑩: follow the left yellow line like ① (1.5x ① speed) for
+    # final_camera_distance_m, then FINAL_REACHED. Code ceiling 0.20 m/s.
+    final_camera_distance_m: 0.45
+    final_camera_linear_speed: 0.15
+    final_camera_detect_timeout_sec: 1.0
     target_x: 320.0
     # Expected fitted boundary x when the supplied calibration image is centered.
     boundary_reference_x: 23.0

@@ -126,7 +126,7 @@ def test_ninth_stop_waits_then_runs_second_curve_from_actual_pose():
     assert node.curve_points[:, 1].min() >= -0.42 - 1e-9
 
 
-def test_finish_next_stop_goes_directly_to_final_reached_and_stops_five_times(
+def test_tenth_stop_starts_final_camera_drive_from_actual_pose(
 ):
     node = types.SimpleNamespace(
         enabled=True,
@@ -160,13 +160,82 @@ def test_finish_next_stop_goes_directly_to_final_reached_and_stops_five_times(
     node._publish_media = lambda publisher, text: node.media.append(text)
     node._normalize_angle = Drive._normalize_angle
     node._next_stop_leg_params = Drive._next_stop_leg_params.__get__(node)
+    node.get_clock = lambda: Clock(20.0)
+    node.target_x_config = 320.0
+    node.final_camera_distance_target = 0.45
+    node.final_camera_linear_speed = 0.15
+    for name in ('_start_final_camera_drive', '_clear_detection'):
+        setattr(node, name, getattr(Drive, name).__get__(node))
     Drive._finish_next_stop(node)
-    assert node.state == drive.DriveState.FINAL_REACHED
-    assert not node.enabled and not node.sequence_active and not node.command_active
+    assert node.state == drive.DriveState.FINAL_CAMERA_DRIVING
+    assert node.enabled and node.sequence_active and not node.command_active
     assert node.last_linear_command == 0.0 and node.steering_command == 0.0
-    assert node.stops == [5]
-    assert node.media == ['STOP']
-    assert 'forward=0.13m, right=0.13m, yaw=-90deg' in node.log.lines[-1]
+    assert not node.path_detected  # waits for a fresh line fit
+    assert (node.final_camera_start_x, node.final_camera_start_y) == (0.26, -0.30)
+    assert 'forward=0.13m, right=0.13m, yaw=-90deg' in node.log.lines[-2]
+
+
+def make_final_camera_node(path_detected=True, elapsed=0.0):
+    published = []
+    node = types.SimpleNamespace(
+        state=drive.DriveState.FINAL_CAMERA_DRIVING,
+        path_detected=path_detected,
+        steering_command=0.07,
+        final_camera_started_at=Clock(0.0),
+        final_camera_detect_timeout=1.0,
+        final_camera_linear_speed=0.15,
+        linear_speed=0.10,
+        max_linear_speed=0.10,
+        last_frame_time=Clock(elapsed),
+        frame_timeout=0.5,
+        command_active=True,
+        cmd_pub=types.SimpleNamespace(publish=published.append),
+        stops=[],
+        faults=[],
+    )
+    node.published = published
+    node._publish_stop = lambda repeat=1: node.stops.append(repeat)
+    node._enter_fault = node.faults.append
+    node._is_stale = lambda now, stamp, timeout: False
+    node._control_camera_drive = Drive._control_camera_drive.__get__(node)
+    return node
+
+
+def test_final_camera_drives_at_one_and_half_times_camera_speed():
+    node = make_final_camera_node()
+    Drive._control_final_camera_drive(node, Clock(0.1))
+    assert node.published[-1].linear.x == pytest.approx(0.15)
+    assert node.published[-1].angular.z == pytest.approx(0.07)
+    assert node.faults == []
+
+
+def test_final_camera_waits_for_line_then_faults_after_timeout():
+    node = make_final_camera_node(path_detected=False)
+    Drive._control_final_camera_drive(node, Clock(0.5))
+    assert node.stops == [1] and node.published == [] and node.faults == []
+    Drive._control_final_camera_drive(node, Clock(1.0))
+    assert node.faults == ['yellow boundary unavailable']
+
+
+def test_final_camera_stops_at_target_distance():
+    node = types.SimpleNamespace(
+        state=drive.DriveState.FINAL_CAMERA_DRIVING,
+        final_camera_start_x=1.0,
+        final_camera_start_y=2.0,
+        final_camera_distance_target=0.45,
+        finished=[],
+    )
+    node._finish_final = node.finished.append
+    msg = types.SimpleNamespace(pose=types.SimpleNamespace(pose=types.SimpleNamespace(
+        position=types.SimpleNamespace(x=1.0, y=2.44),
+        orientation=types.SimpleNamespace(x=0.0, y=0.0, z=0.0, w=1.0))))
+    node.get_clock = lambda: Clock(0.0)
+    node._yaw_from_quaternion = Drive._yaw_from_quaternion
+    Drive._odom_callback(node, msg)
+    assert node.finished == []
+    msg.pose.pose.position.y = 2.45
+    Drive._odom_callback(node, msg)
+    assert len(node.finished) == 1 and '0.450m' in node.finished[0]
 
 
 def test_yaml_has_final_route_target_and_camera_speed():
@@ -182,6 +251,9 @@ def test_yaml_has_final_route_target_and_camera_speed():
     assert params['next_stop_target_right_m'] == 0.29
     assert params['next_stop_target_yaw_deg'] == -90.0
     assert params['curve_linear_speed'] == 0.04
+    assert params['final_camera_distance_m'] == 0.45
+    assert params['final_camera_linear_speed'] == pytest.approx(
+        1.5 * params['linear_speed'])
 
 
 def test_next_stop_uses_camera_speed_without_changing_other_curve_speed():
@@ -252,11 +324,9 @@ def test_removed_post_harvest_states_and_parameters_are_gone():
         'NEXT_STOP_FINAL_ROTATE',
         'NEXT_WAYPOINT_WAIT',
         'NEXT_WAYPOINT_MOVE',
-        'FINAL_CAMERA_DRIVING',
         'FINAL_STRAIGHT_DRIVING',
         'next_stop_final_rotate_deg',
         'next_waypoint_target_forward_m',
-        'final_camera_distance_m',
         'final_straight_distance_m',
     )
     assert all(name not in source for name in removed)
