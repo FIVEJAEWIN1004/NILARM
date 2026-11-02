@@ -163,7 +163,7 @@ def test_direct_final_approach_uses_actual_plus80_feedback(monkeypatch):
     np.testing.assert_array_equal(arm.moves[1][0], high)
     np.testing.assert_array_equal(captured["start"], high)
     np.testing.assert_array_equal(arm.moves[2][0], captured["target"])
-    assert arm.moves[2][1] == pytest.approx(3.25)
+    assert arm.moves[2][1] == pytest.approx(1.625)  # 6.5 s / 4.0
 
 
 def test_direct_final_approach_validation_failure_falls_back(monkeypatch):
@@ -192,7 +192,7 @@ def test_direct_final_approach_duration_obeys_quintic_limits():
     duration = harvest.direct_final_approach_duration(high, grasp)
     max_delta = float(np.max(np.abs(np.degrees(grasp - high))))
 
-    assert duration == pytest.approx(3.25)
+    assert duration == pytest.approx(1.625)  # 6.5 s / 4.0
     assert (
         max_delta * harvest.QUINTIC_PEAK_VELOCITY_FACTOR / duration
         <= harvest.SERVO_PROFILE_VELOCITY_DPS

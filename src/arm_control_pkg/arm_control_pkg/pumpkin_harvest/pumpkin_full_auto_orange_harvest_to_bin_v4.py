@@ -89,6 +89,8 @@ ENABLE_SKIP_HIGH_APPROACH = True
 ENABLE_CONTINUOUS_HELD_TRANSPORT = False
 ENABLE_CONTINUOUS_APPROACH_TO_GRASP = False
 ENABLE_DIRECT_LIFT_TO_ESCAPE = True
+# Rotate to the bin and unfold to bin hover in one move (no stop between).
+ENABLE_ROTATE_TO_HOVER = True
 
 ARM_SETTLE_MIN_SEC = 0.10
 ARM_SETTLE_STABLE_WINDOW_SEC = 0.15
@@ -114,6 +116,7 @@ def reset_direct_hover_state() -> None:
     _direct_last_park_pending = False
     _direct_last_park_duration = None
     v2._precomputed_harvest_plans.clear()
+    v2._held_at_bin_hover = False
 
 
 def complete_direct_hover_transition() -> None:
@@ -144,6 +147,10 @@ def should_skip_high_approach() -> bool:
 
 def should_use_continuous_approach_to_grasp() -> bool:
     return bool(ENABLE_CONTINUOUS_APPROACH_TO_GRASP)
+
+
+def should_rotate_to_hover() -> bool:
+    return bool(ENABLE_ROTATE_TO_HOVER)
 
 
 def should_use_direct_lift_to_escape() -> bool:
@@ -484,6 +491,7 @@ def configure_selective_speed() -> None:
         should_use_continuous_approach_to_grasp
     )
     v2.direct_lift_to_escape_enabled = should_use_direct_lift_to_escape
+    v2.rotate_to_hover_enabled = should_rotate_to_hover
 
 
 def park_at_target_speed(arm) -> None:
@@ -537,25 +545,28 @@ def deposit_open_then_rise(
         ("적재함 방향 접힘", v2._BIN_FOLDED_JOINTS),
     )
 
-    print("[적재] 호박을 든 채 적재함 상공으로 이동합니다.")
-    current_hover_duration = max(
-        BIN_HOVER_MIN_DURATION_SEC,
-        v2.duration_with_safe_speedup(
-            v2._BIN_FOLDED_JOINTS,
+    if v2._held_at_bin_hover:  # transport already ended at bin hover
+        v2._held_at_bin_hover = False
+    else:
+        print("[적재] 호박을 든 채 적재함 상공으로 이동합니다.")
+        current_hover_duration = max(
+            BIN_HOVER_MIN_DURATION_SEC,
+            v2.duration_with_safe_speedup(
+                v2._BIN_FOLDED_JOINTS,
+                v2._BIN_HOVER_JOINTS,
+                min_duration=BIN_HOVER_MIN_DURATION_SEC,
+                speedup=v2.HELD_BIN_MOVE_SPEEDUP,
+            ),
+        )
+        arm.move_joints(
             v2._BIN_HOVER_JOINTS,
-            min_duration=BIN_HOVER_MIN_DURATION_SEC,
-            speedup=v2.HELD_BIN_MOVE_SPEEDUP,
-        ),
-    )
-    arm.move_joints(
-        v2._BIN_HOVER_JOINTS,
-        duration=v2.held_segment_duration_2x(
-            v2._BIN_FOLDED_JOINTS,
-            v2._BIN_HOVER_JOINTS,
-            current_duration=current_hover_duration,
-            minimum_duration=BIN_HOVER_MIN_DURATION_SEC,
-        ),
-    )
+            duration=v2.held_segment_duration_2x(
+                v2._BIN_FOLDED_JOINTS,
+                v2._BIN_HOVER_JOINTS,
+                current_duration=current_hover_duration,
+                minimum_duration=BIN_HOVER_MIN_DURATION_SEC,
+            ),
+        )
     settle_after_arm_move(
         arm, v2._BIN_HOVER_JOINTS, BIN_WAYPOINT_SETTLE_SEC
     )

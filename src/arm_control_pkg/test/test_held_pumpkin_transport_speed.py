@@ -532,3 +532,48 @@ def test_non_last_or_error_park_keeps_existing_duration():
             min_duration=speed.PARK_MIN_DURATION_SEC,
         )
     )]
+
+
+def test_rotate_to_hover_ends_at_hover_in_one_move_within_servo_limits(
+        monkeypatch):
+    grasp = deg_joints(-126.4, 10, 20, 30, 0)
+    plus10 = grasp + deg_joints(0, -3.4, -0.6, 4.0, 0)
+    plus30 = plus10 + deg_joints(0, -5.8, -2.1, 7.9, 0)
+    plus80 = plus30 + deg_joints(0, -8.5, -10.5, 19.0, 0)
+    stages = [plus80, plus30, plus10, grasp]
+    prealign = plus80 + deg_joints(0, -26.0, -4.4, -2.8, -14.4)
+    folded = prealign.copy()
+    folded[0] = np.radians(-23.55)
+    hover = folded + deg_joints(0, 40, -30, -20, 0)
+    monkeypatch.setattr(transport, "_BIN_FOLDED_JOINTS", folded)
+    monkeypatch.setattr(transport, "_BIN_HOVER_JOINTS", hover)
+    monkeypatch.setattr(transport, "_held_at_bin_hover", False)
+    monkeypatch.setattr(transport, "rotate_to_hover_enabled", lambda: True)
+    arm = RecordingArm(grasp)
+
+    transport.move_held_pumpkin_to_bin(arm, prealign, stages)
+
+    # No stop at the folded bin pose: the last move goes straight to hover.
+    target, duration = arm.moves[-1]
+    np.testing.assert_array_equal(target, hover)
+    assert not any(np.array_equal(t, folded) for t, _d in arm.moves)
+    assert transport._held_at_bin_hover
+    delta = np.max(np.abs(np.degrees(hover - prealign)))
+    assert delta / duration * 1.875 <= SERVO_PROFILE_VELOCITY_DPS + 1e-9
+    assert (delta / duration**2 * transport.QUINTIC_PEAK_ACCELERATION_FACTOR
+            <= SERVO_PROFILE_ACCEL_DPS2 + 1e-9)
+
+
+def test_deposit_skips_hover_move_when_transport_ended_there(monkeypatch):
+    hover, folded, _camera = install_taught_bin(monkeypatch)
+    monkeypatch.setattr(transport, "_held_at_bin_hover", True)
+    monkeypatch.setattr(speed, "DIRECT_NEXT_TARGET_FROM_BIN_HOVER", True)
+    monkeypatch.setattr(speed.time, "sleep", lambda _s: None)
+    arm = RecordingArm(hover)
+
+    speed.deposit_open_then_rise(
+        arm, {"camera_joints": np.zeros(5)}, 0.3, is_last=False)
+
+    # First move is the descent from hover, not a move to hover.
+    np.testing.assert_array_equal(arm.moves[0][0], transport._BIN_DROP_JOINTS)
+    assert not transport._held_at_bin_hover

@@ -51,7 +51,8 @@ HELD_FOLD_MIN_DURATION_SEC = 1.0
 HELD_BIN_ROTATION_MIN_DURATION_SEC = 1.0
 HELD_MOVE_SPEEDUP = 2.0
 FINAL_APPROACH_DURATIONS_SEC = (2.5, 2.0, 2.0)
-DIRECT_FINAL_APPROACH_SPEEDUP = 2.0
+# 6.5 s / 4.0 = 1.6 s: about the servo-profile floor of a typical descent.
+DIRECT_FINAL_APPROACH_SPEEDUP = 4.0
 DIRECT_FINAL_APPROACH_MIN_DURATION_SEC = 0.5
 GRIPPER_CLOSE_DURATION_SEC = 1.5  # current-limited: stops on the pumpkin
 # Lift approximately 40 mm clear of the floor, then pass that waypoint without
@@ -64,6 +65,8 @@ _BIN_DROP_JOINTS: np.ndarray | None = None
 _BIN_FOLDED_JOINTS: np.ndarray | None = None
 _ORIGINAL_PRINT_SUMMARY = scan.print_summary
 _precomputed_harvest_plans: dict[int, "HarvestPlan"] = {}
+# True once move_held_pumpkin_to_bin already ended at bin hover.
+_held_at_bin_hover = False
 
 
 def next_target_approach_completed() -> None:
@@ -97,6 +100,11 @@ def continuous_approach_to_grasp_enabled() -> bool:
 
 def direct_lift_to_escape_enabled() -> bool:
     """Keep staged ⑮ unless the competition wrapper enables direct lift."""
+    return False
+
+
+def rotate_to_hover_enabled() -> bool:
+    """Keep rotate-folded then unfold unless the wrapper merges them."""
     return False
 
 
@@ -849,6 +857,32 @@ def move_held_pumpkin_to_bin(
                 minimum_duration=HELD_FOLD_MIN_DURATION_SEC,
             ),
         )
+
+    global _held_at_bin_hover
+    if rotate_to_hover_enabled() and _BIN_HOVER_JOINTS is not None:
+        # Rotation moves joint1, the unfold joints 2-4: one move does both
+        # instead of stopping at the folded bin pose in between.
+        print("[운반] 적재함 방향 회전과 상공 자세 펼치기를 동시에 합니다.")
+        current_duration = max(
+            HELD_BIN_ROTATION_MIN_DURATION_SEC,
+            duration_with_safe_speedup(
+                prealign_joints,
+                _BIN_HOVER_JOINTS,
+                min_duration=HELD_BIN_ROTATION_MIN_DURATION_SEC,
+                speedup=HELD_BIN_MOVE_SPEEDUP,
+            ),
+        )
+        arm.move_joints(
+            _BIN_HOVER_JOINTS,
+            duration=held_segment_duration_2x(
+                prealign_joints,
+                _BIN_HOVER_JOINTS,
+                current_duration=current_duration,
+                minimum_duration=HELD_BIN_ROTATION_MIN_DURATION_SEC,
+            ),
+        )
+        _held_at_bin_hover = True
+        return
 
     print("[운반] 중앙 기본 각도를 거치지 않고 접힌 상태로 적재함 방향에 이동합니다.")
     current_rotation_duration = max(
