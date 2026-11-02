@@ -1,4 +1,4 @@
-"""Run the OMX scan while Pinky drives; harvest only when /harvest arrives.
+"""Run the OMX scan while Pinky drives; drop into the bin only on /harvest.
 
 One pre-scan is one call of the normal ``run_harvest`` in a worker thread.
 Its ``before_harvest`` hook parks that call between scan and harvest (arm at
@@ -7,11 +7,12 @@ the very same scan data, arm connection and default gripper width are used and
 the scan is never repeated. No ROS or hardware imports: unit-testable.
 
 Rules:
-- the arm never grasps before a /harvest goal (Pinky sends it only at STATION);
+- v4 calls the gate holding the FIRST pumpkin at bin hover: the arm never
+  drops into the bin before a /harvest goal (Pinky sends it only at STATION);
 - a session is used by at most one /harvest goal, then dropped (consumed);
-- an unclaimed READY session expires after ``ready_timeout_sec`` (stale) and a
-  new pre-scan request supersedes an unclaimed one; both abandon via the
-  existing ScanCancelled path (back to the central pose, park, disconnect);
+- ``ready_timeout_sec`` <= 0 (server default) waits for /harvest forever; a new
+  pre-scan request or shutdown drops an unclaimed session, and a dropped gate
+  holds the pumpkin with torque on (v4/scan never move or release it);
 - no usable pre-scan (none, failed, no ripe pumpkins, expired) -> the normal
   scan -> harvest fallback;
 - ``_omx_lock`` is held for every run_harvest call: never two OMX users.
@@ -92,9 +93,10 @@ class PrescanCoordinator:
             session.done.set()
 
     def _gate(self, session: _Session) -> bool:
-        """Called by scan.main between scan and harvest (arm at centre)."""
+        """Called by v4 with the first pumpkin held at bin hover."""
         self._log('pre-scan: SCAN_READY; waiting for /harvest (Pinky STATION)')
-        session.start.wait(self._ready_timeout_sec)
+        session.start.wait(
+            self._ready_timeout_sec if self._ready_timeout_sec > 0 else None)
         with self._lock:
             if not session.claimed or session.expired:
                 session.expired = True

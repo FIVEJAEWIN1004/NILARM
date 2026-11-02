@@ -91,6 +91,11 @@ VIEW_MATCH_DISTANCE_M = 0.030
 DUPLICATE_DISTANCE_M = 0.050
 RESTORE_GRIPPER_DURATION_SEC = 3.0
 AUTO_COUNTDOWN_SEC = 3
+# Set by v4 when a pre-scan wait is dropped while holding a pumpkin: main()
+# then skips cleanup and disconnects with torque ON so the pumpkin stays held.
+# It stays set for this process: every later run refuses to touch the arm
+# (its start-up would open the gripper) until the server is restarted.
+keep_torque_on_exit = False
 INITIAL_GRIPPER_DURATION_SEC = 1.5
 INITIAL_READY_DURATION_SEC = 2.3
 INITIAL_CAMERA_MOVE_DURATION_SEC = 1.7
@@ -618,8 +623,9 @@ def main(
     cancel_callback: CancelCallback | None = None,
     before_harvest: Callable[[], bool] | None = None,
 ) -> HarvestRunResult:
-    """Scan, then harvest. ``before_harvest`` (pre-scan) runs between the two
-    with the arm at the central camera pose; False abandons the harvest."""
+    """Scan, then harvest. ``before_harvest`` runs between the two with the
+    arm at the central camera pose; False abandons the harvest. (The v5
+    pre-scan gates at bin hover with the first pumpkin instead, via v4.)"""
     if target_count is not None and target_count <= 0:
         raise ValueError("target_count must be positive when specified")
 
@@ -634,6 +640,10 @@ def main(
     reset_harvest_motion_state()
 
     try:
+        if keep_torque_on_exit:
+            raise RuntimeError(
+                "이전 실행이 호박을 든 채 멈춰 있습니다. 호박을 직접 빼낸 뒤 "
+                "수확 서버를 재시작하세요.")
         raise_if_cancelled(cancel_callback)
         emit_feedback(feedback_callback, successes, "searching")
         calibration = base.load_calibrations()
@@ -823,7 +833,14 @@ def main(
         if cap is not None:
             cap.release()
         cv2.destroyAllWindows()
-        if arm is not None:
+        if arm is not None and keep_torque_on_exit:
+            print("호박을 든 채 토크를 유지하고 연결만 종료합니다. "
+                  "호박을 직접 받친 뒤 로봇팔 전원을 끄세요.")
+            try:
+                arm.disconnect(torque_off=False)
+            except Exception as error:
+                print(f"연결 종료 중 오류: {error}")
+        elif arm is not None:
             try:
                 recovered_for_cleanup = prepare_arm_for_cleanup(arm)
                 if recovered_for_cleanup:

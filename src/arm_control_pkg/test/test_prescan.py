@@ -4,6 +4,8 @@ import io
 import sys
 import threading
 import time
+
+import pytest
 from types import SimpleNamespace
 
 from arm_control_pkg.pumpkin_harvest import (
@@ -262,7 +264,9 @@ def test_real_pipeline_prescan_then_harvest_scans_once(monkeypatch):
 
     assert coordinator.request_prescan()[0]
     assert ready.wait(TIMEOUT)
-    assert 'close' not in [event[0] for event in events]  # no grasp yet
+    names = [event[0] for event in events]
+    # Waiting at bin hover with the first pumpkin; nothing released yet.
+    assert names.count('close') == 1 and 'open' not in names
     assert len(views) == len(scan.SCAN_OFFSETS_DEG)
 
     result = coordinator.harvest(
@@ -275,7 +279,8 @@ def test_real_pipeline_prescan_then_harvest_scans_once(monkeypatch):
     assert names.count('close') == 4 and names[-1] == 'park'
 
 
-def test_real_pipeline_stale_prescan_parks_then_fallback_scans(monkeypatch):
+def test_real_pipeline_dropped_wait_holds_pumpkin_and_blocks_reruns(
+        monkeypatch):
     events = []
     install_fake_hardware(monkeypatch, events, [(0.10, 0.10)])
     monkeypatch.setattr(sys, 'stdin', io.StringIO(''))
@@ -284,14 +289,32 @@ def test_real_pipeline_stale_prescan_parks_then_fallback_scans(monkeypatch):
     coordinator.request_prescan()
     assert ready.wait(TIMEOUT)
     deadline = time.monotonic() + TIMEOUT  # time.sleep is faked here
-    while ('park',) not in events and time.monotonic() < deadline:
+    while (('disconnect_torque_on',) not in events
+           and time.monotonic() < deadline):
         threading.Event().wait(0.01)
     names = [event[0] for event in events]
-    assert 'close' not in names and names[-1] == 'park'  # abandoned safely
+    # Held at bin hover with torque on: never released, parked or moved.
+    assert names.count('close') == 1
+    assert 'open' not in names and 'park' not in names
+    assert names[-1] == 'disconnect_torque_on'
 
-    result = coordinator.harvest(None)
+    # A later goal in the same server must not start the arm (its start-up
+    # would open the gripper): it fails until the server is restarted.
+    with pytest.raises(scan.HarvestExecutionError):
+        coordinator.harvest(None)
+    assert [event[0] for event in events] == names
 
-    assert result.harvested_count == 1 and success(result)
+
+def test_server_waits_for_harvest_forever_by_default():
+    import rclpy
+
+    rclpy.init()
+    node = server.HarvestActionServer()
+    try:
+        assert node.get_parameter('prescan_ready_timeout_sec').value == 0.0
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 def test_server_prescan_service_rules():

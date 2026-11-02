@@ -144,8 +144,9 @@ class FakeOmx(RecordingArm):
     def park(self, duration=None):
         self.events.append(("park",))
 
-    def disconnect(self):
-        pass
+    def disconnect(self, torque_off=True):
+        if not torque_off:
+            self.events.append(("disconnect_torque_on",))
 
 
 def fake_track(x, y):
@@ -173,6 +174,7 @@ def install_fake_hardware(monkeypatch, events, pumpkins):
         (poses, "deposit_and_prepare_next"), (poses, "_BIN_HOVER_JOINTS"),
         (poses, "_BIN_DROP_JOINTS"), (poses, "_BIN_FOLDED_JOINTS"),
         (deposit, "departure_signal_gate"), (scan, "park_arm"),
+        (scan, "keep_torque_on_exit"),
     ):  # run_harvest rewires these; restore them after the test
         monkeypatch.setattr(module, name, getattr(module, name))
     monkeypatch.setattr(scan.time, "sleep", lambda _s: None)
@@ -462,3 +464,30 @@ def test_server_forwards_departure_ready_as_action_feedback(monkeypatch):
         rclpy.shutdown()
     assert handle.feedback == [(2, "departure_ready"), (2, "completed")]
     assert handle.state == "succeeded" and result.success  # result unchanged
+
+
+# --- Pre-scan: wait at bin hover holding the FIRST pumpkin -----------------
+
+def test_prescan_waits_at_bin_hover_holding_first_pumpkin(monkeypatch):
+    def gate():
+        scan.time.sleep("gate")  # run_recorded logs it as ("sleep", "gate")
+        return True
+
+    events, result = run_recorded(monkeypatch, before_harvest=gate)
+    assert result.harvested_count == 4
+    assert events.count(("sleep", "gate")) == 1  # first pumpkin only
+    names = [e[0] for e in events]
+    at = events.index(("sleep", "gate"))
+    assert names[:at].count("close") == 1  # first pumpkin is held
+    assert "open" not in names[:at]        # nothing released before /harvest
+    assert names[at - 2] == "move"         # just reached bin hover (+settle)
+    assert names[at + 1:].index("move") < names[at + 1:].index("open")
+
+
+def test_dropped_prescan_wait_keeps_pumpkin_held_with_torque(monkeypatch):
+    events, result = run_recorded(monkeypatch, before_harvest=lambda: False)
+    names = [e[0] for e in events]
+    assert isinstance(result, scan.HarvestExecutionError)
+    assert names.count("close") == 1 and "open" not in names
+    assert "park" not in names
+    assert names[-1] == "disconnect_torque_on"

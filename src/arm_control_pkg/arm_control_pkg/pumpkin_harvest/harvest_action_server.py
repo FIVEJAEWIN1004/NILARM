@@ -52,8 +52,9 @@ class HarvestActionServer(Node):
     def __init__(self):
         super().__init__('harvest_action_server')
         self.declare_parameter('harvest_all_detected', False)
-        # An unclaimed pre-scan older than this is stale: never harvested.
-        self.declare_parameter('prescan_ready_timeout_sec', 180.0)
+        # 0 = wait for /harvest forever: the pre-scan waits holding the first
+        # pumpkin at bin hover, and must never time out into a park move.
+        self.declare_parameter('prescan_ready_timeout_sec', 0.0)
         self._prescan = PrescanCoordinator(
             _run_v5_harvest,
             ready_timeout_sec=float(

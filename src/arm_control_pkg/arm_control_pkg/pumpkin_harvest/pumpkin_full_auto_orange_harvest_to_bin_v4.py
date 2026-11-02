@@ -95,6 +95,10 @@ ARM_SETTLE_POSITION_TOLERANCE_DEG = 0.5
 ARM_SETTLE_VELOCITY_TOLERANCE_DPS = 0.5
 
 _ORIGINAL_MOVEMENT_DURATION = scan.multi.movement_duration
+# Pre-scan only (v5 sets it per run): called once, holding the first pumpkin
+# at bin hover, until Pinky's /harvest arrives. False = the wait was dropped
+# (server restart/stop): keep holding with torque on, never move or release.
+wait_at_hover_before_first_drop = None
 _direct_hover_pending = False
 _last_pumpkin_cleanup_completed = False
 _direct_last_park_pending = False
@@ -517,6 +521,7 @@ def deposit_open_then_rise(
 ) -> None:
     global _last_pumpkin_cleanup_completed
     global _direct_last_park_pending, _direct_last_park_duration
+    global wait_at_hover_before_first_drop
     if (
         v2._BIN_HOVER_JOINTS is None
         or v2._BIN_DROP_JOINTS is None
@@ -553,6 +558,17 @@ def deposit_open_then_rise(
     settle_after_arm_move(
         arm, v2._BIN_HOVER_JOINTS, BIN_WAYPOINT_SETTLE_SEC
     )
+
+    gate, wait_at_hover_before_first_drop = (
+        wait_at_hover_before_first_drop, None)
+    if gate is not None:
+        print("[Pinky 대기] 첫 호박을 든 채 적재함 상공에서 /harvest를 기다립니다.")
+        if not gate():
+            scan.keep_torque_on_exit = True
+            raise RuntimeError(
+                "Pinky 대기가 취소되었습니다(서버 재시작/종료). "
+                "호박을 든 자세 그대로 토크를 유지합니다.")
+        print("[Pinky 도착] /harvest 수신. 바로 적재합니다.")
 
     print("[적재] 새로 저장한 놓기 자세로 하강합니다.")
     arm.move_joints(

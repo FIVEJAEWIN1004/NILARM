@@ -113,6 +113,8 @@ def run_harvest(
         print("[로봇팔 정리] Pinky 출발 후 마지막 정리 자세를 계속 수행합니다.")
 
     v4.departure_signal_gate = departure_gate
+    # Pre-scan: grasp the first pumpkin, then wait at bin hover for /harvest.
+    v4.wait_at_hover_before_first_drop = before_harvest
 
     # Use the newly re-taught collision-aware bin poses exactly as saved.
     v2.DROP_RAISE_M = 0.0
@@ -155,7 +157,6 @@ def run_harvest(
         target_count=target_count,
         feedback_callback=feedback_callback,
         cancel_callback=cancel_callback,
-        before_harvest=before_harvest,
     )
 
 
