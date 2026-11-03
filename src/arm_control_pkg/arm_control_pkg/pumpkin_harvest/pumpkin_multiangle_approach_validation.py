@@ -55,6 +55,8 @@ HIGH_MOVE_DURATION_SEC = 12.0
 LOWER_MOVE_DURATION_SEC = 8.0
 RETURN_DURATION_SEC = 12.0
 SCAN_STEP_DURATION_SEC = 6.0
+SPATIAL_SAMPLE_MIN_COUNT = 9
+SPATIAL_NEIGHBOR_COUNT = 4
 
 
 class TestCancelled(Exception):
@@ -116,6 +118,109 @@ def load_angle_z_residuals(path: Path | None = None) -> dict[int, float]:
             raise ValueError(f"{angle:+d}도 Z 잔여보정이 50 mm를 초과합니다.")
         residuals[angle] = value
     return residuals
+
+
+def load_angle_spatial_samples(
+    path: Path | None = None,
+) -> dict[int, list[dict]]:
+    """Load optional per-angle screen-position XYZ correction samples."""
+    if path is None:
+        path = ANGLE_RESIDUAL_PATH
+    if not path.is_file():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    angles = data.get("angles")
+    if data.get("method") != "per_angle_manual_world_jog_v1" or not isinstance(
+        angles, dict
+    ):
+        raise ValueError(f"각도별 9점 XYZ 보정 파일 형식이 다릅니다: {path}")
+    result = {}
+    for key, record in angles.items():
+        if not isinstance(record, dict):
+            continue
+        angle = int(key)
+        valid = []
+        for sample in record.get("samples", []):
+            if not isinstance(sample, dict):
+                continue
+            pixel = np.asarray(sample.get("target_pixel_uv"), dtype=float)
+            xy = np.asarray(sample.get("local_residual_m"), dtype=float)
+            try:
+                z = float(sample.get("grasp_z_residual_m"))
+                slot = int(sample.get("grid_slot"))
+            except (TypeError, ValueError):
+                continue
+            if (
+                pixel.shape != (2,)
+                or xy.shape != (2,)
+                or not np.all(np.isfinite(pixel))
+                or not np.all(np.isfinite(xy))
+                or not math.isfinite(z)
+                or not 1 <= slot <= 9
+                or np.linalg.norm(xy) > 0.050
+                or abs(z) > 0.050
+            ):
+                continue
+            valid.append({
+                "grid_slot": slot,
+                "pixel": pixel,
+                "xy": xy,
+                "z": z,
+            })
+        if valid:
+            result[angle] = valid
+    return result
+
+
+def spatial_xyz_residual(
+    commanded_offset_deg: float,
+    selected_pixel,
+    fallback_xy,
+    fallback_z: float,
+    *,
+    samples_by_angle=None,
+):
+    """Interpolate XYZ from nearby screen samples, or return the fallback."""
+    fallback_xy = np.asarray(fallback_xy, dtype=float)
+    fallback_z = float(fallback_z)
+    if samples_by_angle is None:
+        samples_by_angle = load_angle_spatial_samples()
+    angle = int(round(float(commanded_offset_deg)))
+    samples = samples_by_angle.get(angle, [])
+    if (
+        len(samples) < SPATIAL_SAMPLE_MIN_COUNT
+        or len({int(item["grid_slot"]) for item in samples}) < 9
+    ):
+        return fallback_xy.copy(), fallback_z, False
+
+    query = np.asarray(selected_pixel, dtype=float)
+    pixels = np.asarray([item["pixel"] for item in samples], dtype=np.float32)
+    hull = cv2.convexHull(pixels.reshape(-1, 1, 2))
+    if len(hull) < 3 or abs(cv2.contourArea(hull)) < 1.0:
+        return fallback_xy.copy(), fallback_z, False
+    if cv2.pointPolygonTest(
+        hull, (float(query[0]), float(query[1])), False
+    ) < 0:
+        return fallback_xy.copy(), fallback_z, False
+
+    distances = np.linalg.norm(pixels.astype(float) - query, axis=1)
+    exact = np.flatnonzero(distances < 1e-6)
+    if exact.size:
+        sample = samples[int(exact[0])]
+        return sample["xy"].copy(), float(sample["z"]), True
+
+    nearest = np.argsort(distances)[:SPATIAL_NEIGHBOR_COUNT]
+    weights = 1.0 / np.square(np.maximum(distances[nearest], 1e-6))
+    weights /= np.sum(weights)
+    xy = np.sum(
+        np.asarray([samples[int(i)]["xy"] for i in nearest])
+        * weights[:, None],
+        axis=0,
+    )
+    z = float(np.sum(
+        np.asarray([samples[int(i)]["z"] for i in nearest]) * weights
+    ))
+    return xy, z, True
 
 
 def movement_duration(delta_deg: float) -> float:
@@ -347,9 +452,20 @@ def build_rotated_target(
     )
     if angle_residuals is None:
         angle_residuals = load_angle_residuals()
-    residual_local = angle_residuals.get(
-        int(round(commanded_offset_deg)),
+    angle = int(round(commanded_offset_deg))
+    fallback_xy = angle_residuals.get(
+        angle,
         np.zeros(2, dtype=float),
+    )
+    saved_z = load_angle_z_residuals()
+    fallback_z = saved_z.get(
+        angle, DEFAULT_ANGLE_GRASP_Z_OFFSET_M.get(angle, 0.0)
+    )
+    residual_local, spatial_z_residual, used_spatial = spatial_xyz_residual(
+        commanded_offset_deg,
+        selected_pixel,
+        fallback_xy,
+        fallback_z,
     )
     corrected_reference_xy = (
         raw_reference_xy + central_correction + residual_local
@@ -397,6 +513,11 @@ def build_rotated_target(
         "raw_reference_xy": raw_reference_xy,
         "corrected_reference_xy": corrected_reference_xy,
         "residual_local": residual_local,
+        "spatial_grasp_z_residual_m": (
+            spatial_z_residual if used_spatial else None
+        ),
+        "resolved_grasp_z_residual_m": spatial_z_residual,
+        "used_spatial_xyz_residual": used_spatial,
         "reference_margin_m": reference_margin,
         "world_raw_xy": world_raw_xy,
         "world_target_xy": world_target_xy,

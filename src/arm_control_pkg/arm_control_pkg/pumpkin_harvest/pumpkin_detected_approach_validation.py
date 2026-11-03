@@ -288,7 +288,9 @@ def stable_pixel(history) -> tuple[float, float] | None:
     return float(median[0]), float(median[1])
 
 
-def choose_pumpkin(model: YOLO, cap, calibration) -> tuple[float, float] | None:
+def choose_pumpkin(
+    model: YOLO, cap, calibration, *, show_grid: bool = False
+) -> tuple[float, float] | None:
     window = "One pumpkin - M lock target / Q cancel"
     history = deque(maxlen=STABLE_SAMPLE_COUNT)
     boundary = cv2.convexHull(
@@ -314,6 +316,25 @@ def choose_pumpkin(model: YOLO, cap, calibration) -> tuple[float, float] | None:
         )
         annotated = result.plot()
         cv2.polylines(annotated, [boundary], True, (255, 255, 0), 2)
+        if show_grid:
+            low = np.min(calibration["image_points"], axis=0)
+            high = np.max(calibration["image_points"], axis=0)
+            x0, y0 = (int(round(value)) for value in low)
+            x1, y1 = (int(round(value)) for value in high)
+            for fraction in (1.0 / 3.0, 2.0 / 3.0):
+                x = int(round(x0 + (x1 - x0) * fraction))
+                y = int(round(y0 + (y1 - y0) * fraction))
+                cv2.line(annotated, (x, y0), (x, y1), (255, 0, 255), 1)
+                cv2.line(annotated, (x0, y), (x1, y), (255, 0, 255), 1)
+            for row in range(3):
+                for column in range(3):
+                    label = str(row * 3 + column + 1)
+                    x = int(round(x0 + (x1 - x0) * (column + 0.08) / 3.0))
+                    y = int(round(y0 + (y1 - y0) * (row + 0.18) / 3.0))
+                    cv2.putText(
+                        annotated, label, (x, y), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.55, (255, 0, 255), 2,
+                    )
 
         if len(detections) != 1:
             history.clear()
