@@ -1,4 +1,4 @@
-"""ksam_nilarm_7th (Pinky) + laptop runner build/restart, fully stubbed.
+"""ksam_nilarm_7th (Pinky) + laptop runner build/restart/match, fully stubbed.
 
 `ssh`, `nilarm`, `ros2`, `colcon`, `pgrep` and `setsid` are stubs; the only
 processes ever signalled are `sleep` dummies this test starts itself. No SSH,
@@ -33,10 +33,7 @@ def write_exe(path, text):
 SSH_STUB = r'''#!/usr/bin/env bash
 echo "ssh $*" >> "$STUB_LOG"
 case "${@: -1}" in
-  true) exit "${STUB_CONNECT_RC:-0}" ;;
-  *" build") exit "${STUB_BUILD_RC:-0}" ;;
-  *" restart") exit "${STUB_RESTART_RC:-0}" ;;
-  *" prescan") exit "${STUB_PRESCAN_RC:-0}" ;;
+  *" match") exit "${STUB_MATCH_RC:-0}" ;;
 esac
 exit 99
 '''
@@ -75,17 +72,17 @@ def test_is_a_pinky_command_that_execs_repo_nilarm():
     assert 'colcon' not in text  # the build runs on the laptop, over SSH
 
 
-def test_success_builds_then_restarts_then_execs_nilarm(tmp_path):
+def test_success_is_one_laptop_match_call_then_execs_nilarm(tmp_path):
     result = run_ksam(tmp_path)
     assert result.returncode == 0, result.stderr
     kinds = [c.split()[-1] if c.startswith('ssh') else 'nilarm'
              for c in result.calls if not c.startswith('nilarm-env')]
-    assert kinds == ['true', 'build', 'restart', 'prescan', 'nilarm']
+    assert kinds == ['match', 'nilarm']
     # The laptop pre-scan already runs: nilarm-start must not restart it.
     assert 'nilarm-env PRESCAN=0 REMOTE=0' in result.calls
     assert result.nilarm == ['nilarm ROS_DOMAIN_ID=99 args=--x']
-    for line in ('노트북 SSH 연결 확인', '노트북 최신 로봇팔 코드 빌드', '기존 수확 서버 재시작',
-                 '/harvest 서버 준비 완료', 'Pinky competition launch 시작'):
+    for line in ('노트북 로봇팔 서버 + prescan 준비', '/harvest 서버 준비 완료',
+                 'Pinky competition launch 시작'):
         assert f'[KSAM 7TH] {line}' in result.stdout
 
 
@@ -94,28 +91,20 @@ def test_reuses_nilarm_remote_env_and_domain_99(tmp_path):
     ssh = [c for c in result.calls if c.startswith('ssh')]
     assert all('lapuser@10.9.8.7' in c for c in ssh)
     assert all('BatchMode=yes' in c and 'StrictHostKeyChecking=yes' in c for c in ssh)
-    assert 'ROS_DOMAIN_ID=99 bash "$HOME/NILARM/scripts/run_harvest_server.sh" build' in ssh[1]
-    assert 'ROS_DOMAIN_ID=99' in ssh[2]
+    assert 'ROS_DOMAIN_ID=99 bash "$HOME/NILARM/scripts/run_harvest_server.sh" match' in ssh[0]
     assert not re.search(r'\d+\.\d+\.\d+\.\d+|@\w', KSAM.read_text())  # nothing hardcoded
 
 
 @pytest.mark.parametrize('stub,message', [
-    ({'STUB_CONNECT_RC': '255'}, '노트북 SSH 연결 실패'),
-    ({'STUB_BUILD_RC': '1'}, '노트북 원격 빌드 실패'),
-    ({'STUB_BUILD_RC': '127'}, '노트북 NILARM 작업공간 없음'),
-    ({'STUB_BUILD_RC': '255'}, 'SSH 연결 끊김'),
-    ({'STUB_RESTART_RC': '1'}, '/harvest 준비 확인 실패'),
-    ({'STUB_RESTART_RC': '255'}, 'SSH 연결 끊김'),
+    ({'STUB_MATCH_RC': '255'}, '노트북 SSH 연결 실패/끊김'),
+    ({'STUB_MATCH_RC': '1'}, '수확 서버 준비 실패'),
+    ({'STUB_MATCH_RC': '124'}, '수확 서버 준비 실패'),
+    ({'STUB_MATCH_RC': '127'}, '노트북 NILARM 작업공간 없음'),
 ])
 def test_any_laptop_failure_never_launches_pinky(tmp_path, stub, message):
     result = run_ksam(tmp_path, **stub)
     assert result.returncode == 1 and result.nilarm == []
     assert message in result.stderr and '주행을 시작하지 않습니다' in result.stderr
-
-
-def test_build_failure_never_restarts_server(tmp_path):
-    result = run_ksam(tmp_path, STUB_BUILD_RC='1')
-    assert not any(c.endswith(' restart') for c in result.calls)
 
 
 def test_unconfigured_laptop_never_sshs_or_launches(tmp_path):
@@ -156,10 +145,18 @@ def laptop(tmp_path):
               'exit $found\n')
     spawned = tmp_path / 'spawned'
     write_exe(bin_dir / 'setsid', '#!/usr/bin/env bash\necho "setsid $*" >> "$STUB_LOG"\n'
-              f'echo $$ >> {spawned}\nexec sleep 30\n')
+              f'echo $$ >> {spawned}\n'
+              '[ -n "$STUB_NO_READY" ] || echo "[INFO] Harvest Action Server READY"\n'
+              'exec sleep 30\n')
     write_exe(bin_dir / 'colcon', '#!/usr/bin/env bash\necho "colcon $* '
               'ROS_DOMAIN_ID=$ROS_DOMAIN_ID" >> "$STUB_LOG"\nexit ${STUB_COLCON_RC:-0}\n')
+    prescans = tmp_path / 'prescans'
     write_exe(bin_dir / 'ros2', '#!/usr/bin/env bash\necho "ros2 $*" >> "$STUB_LOG"\n'
+              'if [ "$1" = service ]; then\n'
+              f'  echo x >> {prescans}; n=$(wc -l < {prescans})\n'
+              '  [ "$n" -gt "${STUB_PRESCAN_FAILS:-0}" ] && ok=True || ok=False\n'
+              '  echo "response: success=$ok, message=\'pre-scan started\'"; exit 0\n'
+              'fi\n'
               'echo "Action servers: ${STUB_HARVEST:-1}"\n')
     write_exe(bin_dir / 'pkill', '#!/usr/bin/env bash\necho "pkill $*" >> "$STUB_LOG"\n')
     log = tmp_path / 'calls.log'
@@ -178,6 +175,7 @@ def laptop(tmp_path):
         logs = repo / '.nilarm_logs'
         logs.mkdir(exist_ok=True)
         log.write_text('')
+        prescans.write_text('')
         if pid_file is not None:
             (logs / 'harvest_server.pid').write_text(f'{pid_file}\n')
         env = dict(os.environ, PATH=f'{bin_dir}:{os.environ["PATH"]}', HOME=str(home),
@@ -197,6 +195,7 @@ def laptop(tmp_path):
 
     run.dummy = dummy
     run.home = home
+    run.repo = repo
     yield run
     for pid in dummies:
         try:
@@ -303,8 +302,96 @@ def test_current_speed_direct_and_release_settings():
 
 
 def test_prescan_request_failure_still_launches_and_lets_nilarm_start_retry(tmp_path):
-    result = run_ksam(tmp_path, STUB_PRESCAN_RC='1')
+    result = run_ksam(tmp_path, STUB_MATCH_RC='3')
     assert result.returncode == 0, result.stderr
     assert result.nilarm == ['nilarm ROS_DOMAIN_ID=99 args=--x']
     assert 'nilarm-env PRESCAN=unset REMOTE=0' in result.calls
     assert 'prescan 요청 실패' in result.stdout
+
+
+# --- Laptop side: run_harvest_server.sh match (ksam_nilarm_7th's one call) ---
+
+def src_file(laptop, age_sec):
+    path = laptop.repo / 'src' / 'arm_control_pkg' / 'a.py'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('')
+    t = path.stat().st_mtime - age_sec
+    os.utime(path, (t, t))
+    return path
+
+
+def fresh_stamp(laptop):
+    (laptop.repo / '.nilarm_logs').mkdir(exist_ok=True)
+    (laptop.repo / '.nilarm_logs' / 'build.stamp').write_text('')
+
+
+def kinds(result):
+    return [c.split()[0] if not c.startswith('ros2') else ' '.join(c.split()[:3])
+            for c in result.calls if c.startswith(('colcon', 'setsid', 'ros2'))]
+
+
+def test_match_unchanged_reuses_running_server_no_build_no_restart(laptop):
+    src_file(laptop, age_sec=100)
+    fresh_stamp(laptop)
+    server = laptop.dummy()
+    result = laptop('match', servers=[server], pid_file=server)
+    assert result.returncode == 0, result.stdout
+    assert kinds(result) == ['ros2 service call']
+    assert 'build: skipped' in result.stdout and f'reusing harvest server pid {server}' in result.stdout
+    assert alive(server)
+
+
+def test_match_source_changed_builds_and_restarts(laptop):
+    fresh_stamp(laptop)
+    server = laptop.dummy()
+    stamp = laptop.repo / '.nilarm_logs' / 'build.stamp'
+    t = stamp.stat().st_mtime - 100
+    os.utime(stamp, (t, t))
+    src_file(laptop, age_sec=-10)  # edited after the build and the server start
+    result = laptop('match', servers=[server], pid_file=server)
+    assert result.returncode == 0, result.stdout
+    assert kinds(result) == ['colcon', 'setsid', 'ros2 service call']
+    assert not alive(server) and 'OK: /harvest server READY' in result.stdout
+    assert 'build: src/arm_control_pkg/a.py changed' in result.stdout
+    assert not (laptop.repo / '.nilarm_logs' / 'build.stamp.new').exists()
+
+
+def test_match_first_run_builds_and_starts(laptop):
+    result = laptop('match')
+    assert result.returncode == 0, result.stdout
+    assert kinds(result) == ['colcon', 'setsid', 'ros2 service call']
+
+
+def test_match_reused_server_rejecting_prescan_is_restarted(laptop):
+    fresh_stamp(laptop)
+    server = laptop.dummy()
+    result = laptop('match', servers=[server], pid_file=server, STUB_PRESCAN_FAILS='1')
+    assert result.returncode == 0, result.stdout
+    assert kinds(result) == ['ros2 service call', 'setsid', 'ros2 service call']
+    assert 'restarting it' in result.stdout and not alive(server)
+
+
+def test_match_server_without_matching_pid_file_is_restarted(laptop):
+    fresh_stamp(laptop)
+    server = laptop.dummy()
+    result = laptop('match', servers=[server], pid_file=123456789)
+    assert result.returncode == 0 and kinds(result) == ['setsid', 'ros2 service call']
+
+
+def test_match_build_failure_never_touches_server(laptop):
+    server = laptop.dummy()
+    result = laptop('match', servers=[server], pid_file=server, STUB_COLCON_RC='2')
+    assert result.returncode == 1 and alive(server)
+    assert not any(c.startswith(('setsid', 'ros2')) for c in result.calls)
+    assert not (laptop.repo / '.nilarm_logs' / 'build.stamp').exists()
+
+
+def test_match_new_server_never_ready_fails(laptop):
+    result = laptop('match', STUB_NO_READY='1')
+    assert result.returncode == 1 and '/harvest not READY' in result.stdout
+    assert not any(c.startswith('ros2') for c in result.calls)
+
+
+def test_match_prescan_failure_after_restart_is_exit_3(laptop):
+    result = laptop('match', STUB_PRESCAN_FAILS='9')
+    assert result.returncode == 3, result.stdout

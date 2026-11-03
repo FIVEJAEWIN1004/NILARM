@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # PINKY: 7th KSAM match command (`ksam_nilarm_7th`, linked by setup_pinky.sh).
 # Before the normal `nilarm` match flow it makes the LAPTOP run the newest arm
-# code: over SSH it builds arm_control_pkg and restarts the /harvest server
-# (scripts/run_harvest_server.sh build / restart). Only when both succeed does
-# it exec this repo's `nilarm` (DISABLED drive, nilarm-start checks, prescan,
-# then /camera_drive/enable). Any failure: exit non-zero, Pinky never starts.
+# code and start the OMX pre-scan, in ONE SSH call (run_harvest_server.sh
+# match): build/restart only when the arm sources changed (or the running
+# server is gone or rejects the pre-scan). Only when the /harvest server is up
+# does it exec this repo's `nilarm` (DISABLED drive, nilarm-start checks, then
+# /camera_drive/enable). Any failure: exit non-zero, Pinky never starts.
 # Laptop address: <repo>/.nilarm_remote_env (scripts/setup_remote_harvest.sh).
 #   ksam_nilarm_7th [competition.launch.py args]
 repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
@@ -35,40 +36,22 @@ laptop() {  # $1 = runner command, $2 = timeout s; 0 ok, 127 workspace missing, 
         "[ -f \"${runner}\" ] || exit 127; ROS_DOMAIN_ID=${ROS_DOMAIN_ID} bash \"${runner}\" $1"
 }
 
-say "노트북 SSH 연결 확인 (${target})"
-timeout 15 ssh "${ssh_opts[@]}" "${target}" true \
-    || fail "노트북 SSH 연결 실패 (${target}; Wi-Fi/키/노트북 확인)"
-
-say "노트북 최신 로봇팔 코드 빌드"
-laptop build 900
+say "노트북 로봇팔 서버 + prescan 준비 (${target}; 코드가 바뀌었으면 빌드/재시작)"
+# The pre-scan starts here, while Pinky launches and runs its checks.
+# nilarm-start must then not ask again: a second request restarts the scan.
+laptop match 900
 case $? in
-    0) ;;
+    0) export NILARM_PRESCAN=0 ;;
+    3) say "prescan 요청 실패: Pinky 점검 후 nilarm-start가 다시 요청합니다" ;;
     127) fail "노트북 NILARM 작업공간 없음 (~/${NILARM_LAPTOP_REPO:-NILARM})" ;;
-    255) fail "빌드 중 노트북 SSH 연결 끊김" ;;
-    *) fail "노트북 원격 빌드 실패 (위 로그 확인)" ;;
-esac
-
-say "기존 수확 서버 재시작"
-laptop restart 120
-case $? in
-    0) ;;
-    255) fail "재시작 중 노트북 SSH 연결 끊김" ;;
-    *) fail "수확 서버 재시작 또는 /harvest 준비 확인 실패 (위 FAIL 확인)" ;;
+    255) fail "노트북 SSH 연결 실패/끊김 (${target}; Wi-Fi/키/노트북 확인)" ;;
+    *) fail "노트북 빌드 또는 수확 서버 준비 실패 (위 FAIL 확인)" ;;
 esac
 say "/harvest 서버 준비 완료"
 
-# Start the OMX pre-scan now, while Pinky launches and runs its checks.
-# nilarm-start must then not ask again: a second request restarts the scan.
-say "로봇팔 prescan 시작 (Pinky 준비와 동시에 스캔)"
-if laptop prescan 30; then
-    export NILARM_PRESCAN=0
-else
-    say "prescan 요청 실패: Pinky 점검 후 nilarm-start가 다시 요청합니다"
-fi
-
 say "Pinky competition launch 시작"
 say "prescan 요청 및 주행 안전 게이트 대기"
-# /harvest was just restarted above: skip nilarm-start's second SSH ensure
+# /harvest was just ensured above: skip nilarm-start's second SSH ensure
 # (it still requires exactly 1 /harvest server before arming).
 export NILARM_REMOTE_HARVEST=0
 exec "${repo}/src/nilarm_bringup/scripts/nilarm" "$@"
