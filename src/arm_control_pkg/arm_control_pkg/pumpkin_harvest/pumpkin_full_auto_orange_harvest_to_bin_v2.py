@@ -529,10 +529,14 @@ ANGLE_GRASP_Z_OFFSET_M = scan.multi.DEFAULT_ANGLE_GRASP_Z_OFFSET_M
 def apply_angle_grasp_z_offset(target: dict, commanded_offset_deg: float) -> dict:
     """Return a copied target with the verified per-angle grasp-Z residual."""
     angle = int(round(float(commanded_offset_deg)))
-    saved_z_offsets = scan.multi.load_angle_z_residuals()
-    z_offset = saved_z_offsets.get(
-        angle, ANGLE_GRASP_Z_OFFSET_M.get(angle, 0.0)
-    )
+    spatial_z = target.get("spatial_grasp_z_residual_m")
+    if spatial_z is None:
+        saved_z_offsets = scan.multi.load_angle_z_residuals()
+        z_offset = saved_z_offsets.get(
+            angle, ANGLE_GRASP_Z_OFFSET_M.get(angle, 0.0)
+        )
+    else:
+        z_offset = float(spatial_z)
     result = dict(target)
     result["angle_grasp_z_offset_m"] = z_offset
     result["planned_grasp_z"] = float(target["planned_grasp_z"]) + z_offset

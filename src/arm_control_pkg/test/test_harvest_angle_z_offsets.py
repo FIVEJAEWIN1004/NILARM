@@ -72,6 +72,73 @@ def test_saved_z_residual_overrides_legacy_value(tmp_path, monkeypatch):
     assert adjusted["angle_grasp_z_offset_m"] == pytest.approx(-0.031)
 
 
+def spatial_sample(slot, u, v, x, y, z):
+    return {
+        "grid_slot": slot,
+        "pixel": np.asarray([u, v], dtype=float),
+        "xy": np.asarray([x, y], dtype=float),
+        "z": z,
+    }
+
+
+def test_screen_position_interpolates_xyz_inside_sample_hull():
+    samples = {70: [
+        spatial_sample(
+            row * 3 + column + 1,
+            column * 50,
+            row * 50,
+            column * 0.005,
+            row * 0.010,
+            (row + column) * 0.005,
+        )
+        for row in range(3)
+        for column in range(3)
+    ]}
+
+    xy, z, used = multi.spatial_xyz_residual(
+        70, (50, 50), np.asarray([0.1, 0.1]), 0.1,
+        samples_by_angle=samples,
+    )
+
+    assert used
+    assert xy == pytest.approx([0.005, 0.010])
+    assert z == pytest.approx(0.010)
+
+
+def test_screen_position_outside_sample_hull_uses_fallback():
+    samples = {70: [
+        spatial_sample(
+            row * 3 + column + 1,
+            column * 50,
+            row * 50,
+            0.001 * column,
+            0.001 * row,
+            0.001 * (row + column),
+        )
+        for row in range(3)
+        for column in range(3)
+    ]}
+    fallback_xy = np.asarray([0.003, -0.004])
+
+    xy, z, used = multi.spatial_xyz_residual(
+        70, (120, 120), fallback_xy, -0.005,
+        samples_by_angle=samples,
+    )
+
+    assert not used
+    assert xy == pytest.approx(fallback_xy)
+    assert z == pytest.approx(-0.005)
+
+
+def test_apply_height_prefers_spatial_z():
+    target = make_target()
+    target["spatial_grasp_z_residual_m"] = 0.012
+
+    adjusted = harvest.apply_angle_grasp_z_offset(target, 70)
+
+    assert adjusted["angle_grasp_z_offset_m"] == pytest.approx(0.012)
+
+
 @pytest.mark.parametrize(
     ("observed_angles", "selected_angle", "expected_angle"),
     [

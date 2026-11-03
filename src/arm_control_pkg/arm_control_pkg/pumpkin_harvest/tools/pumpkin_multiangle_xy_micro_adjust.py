@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Measure and save one scan angle's residual XYZ correction safely.
 
-The arm detects one pumpkin at a selected joint1 scan angle, approaches only
-to 30 mm above the planned grasp pose, then requires a separate confirmation
-before reaching the currently calibrated grasp height.  The operator can jog
+The arm detects one pumpkin at a selected joint1 scan angle, validates the
+80/30 mm IK poses without commanding them, then requires a separate
+confirmation before moving directly from pre-alignment to the currently
+calibrated grasp height.  The operator can jog
 in physical XY directions and vertically.  The gripper is never operated.
 SAVE stores the resulting XYZ correction for that one angle;
 pumpkin_multiangle_approach_validation.py loads it automatically.
@@ -30,11 +31,17 @@ Z_STEP_M = 0.002
 MAX_TOTAL_JOG_M = 0.030
 MAX_TOTAL_Z_JOG_M = 0.030
 CALIBRATION_SPEED_MULTIPLIER = 2.0
+ANGLE_MOVE_SPEED_MULTIPLIER = 4.0
 READY_DURATION_SEC = 5.0
 JOG_DURATION_SEC = 3.0
 MAX_JOG_SINGLE_JOINT_DEG = 12.0
 MAX_JOG_TOTAL_JOINT_DEG = 30.0
 CALIBRATION_OFFSETS_DEG = (-140, -110, -80, -50, 70, 100, 130)
+GRID_LABELS = (
+    "왼쪽 위", "중앙 위", "오른쪽 위",
+    "왼쪽 중앙", "화면 중앙", "오른쪽 중앙",
+    "왼쪽 아래", "중앙 아래", "오른쪽 아래",
+)
 
 
 def ask_calibration_offset():
@@ -63,6 +70,11 @@ def calibration_duration(normal_duration_sec):
     if duration <= 0.0:
         raise ValueError("이동 시간은 0보다 커야 합니다.")
     return duration / CALIBRATION_SPEED_MULTIPLIER
+
+
+def angle_move_duration(offset_deg):
+    """Move between camera angles at 4x the original validated timing."""
+    return multi.movement_duration(offset_deg) / ANGLE_MOVE_SPEED_MULTIPLIER
 
 
 def joint_change(target, seed):
@@ -156,6 +168,21 @@ def load_store():
     return data
 
 
+def grid_slot_for_pixel(pixel, image_points):
+    """Map a detected pixel to one of nine cells inside the calibration box."""
+    points = np.asarray(image_points, dtype=float)
+    low = np.min(points, axis=0)
+    high = np.max(points, axis=0)
+    span = high - low
+    if np.any(span <= 0.0):
+        raise ValueError("영상 보정 영역의 크기가 올바르지 않습니다.")
+    normalized = np.clip((np.asarray(pixel, dtype=float) - low) / span, 0.0, 1.0)
+    column = min(2, int(normalized[0] * 3.0))
+    row = min(2, int(normalized[1] * 3.0))
+    slot = row * 3 + column + 1
+    return slot, GRID_LABELS[slot - 1]
+
+
 def save_residual(
     commanded_deg,
     measured_deg,
@@ -163,13 +190,16 @@ def save_residual(
     local_residual,
     world_residual,
     grasp_z_residual_m,
+    grid_slot,
 ):
     data = load_store()
     key = str(int(round(commanded_deg)))
     previous = data["angles"].get(key)
-    record = {
-        "saved_at_utc": datetime.now(timezone.utc).isoformat(),
-        "commanded_offset_deg": int(round(commanded_deg)),
+    saved_at = datetime.now(timezone.utc).isoformat()
+    sample = {
+        "grid_slot": int(grid_slot),
+        "grid_label": GRID_LABELS[int(grid_slot) - 1],
+        "saved_at_utc": saved_at,
         "measured_offset_deg": float(measured_deg),
         "target_pixel_uv": [float(pixel[0]), float(pixel[1])],
         "local_residual_m": [float(v) for v in local_residual],
@@ -178,12 +208,38 @@ def save_residual(
         "world_residual_mm": [float(v * 1000.0) for v in world_residual],
         "grasp_z_residual_m": float(grasp_z_residual_m),
         "grasp_z_residual_mm": float(grasp_z_residual_m * 1000.0),
+    }
+    samples = [] if not isinstance(previous, dict) else list(
+        previous.get("samples", [])
+    )
+    samples = [
+        item for item in samples
+        if int(item.get("grid_slot", -1)) != int(grid_slot)
+    ]
+    samples.append(sample)
+    samples.sort(key=lambda item: int(item["grid_slot"]))
+
+    fallback = previous if isinstance(previous, dict) else sample
+    record = {
+        "saved_at_utc": saved_at,
+        "commanded_offset_deg": int(round(commanded_deg)),
+        "measured_offset_deg": float(fallback["measured_offset_deg"]),
+        "target_pixel_uv": list(fallback["target_pixel_uv"]),
+        "local_residual_m": list(fallback["local_residual_m"]),
+        "local_residual_mm": list(fallback["local_residual_mm"]),
+        "world_residual_m": list(fallback["world_residual_m"]),
+        "world_residual_mm": list(fallback["world_residual_mm"]),
+        "grasp_z_residual_m": float(fallback["grasp_z_residual_m"]),
+        "grasp_z_residual_mm": float(fallback["grasp_z_residual_mm"]),
+        "spatial_method": "screen_grid_idw4_v1",
+        "sample_count": len(samples),
+        "samples": samples,
         "replaces_saved_at_utc": (
             previous.get("saved_at_utc") if isinstance(previous, dict) else None
         ),
     }
     data["angles"][key] = record
-    data["updated_at_utc"] = record["saved_at_utc"]
+    data["updated_at_utc"] = saved_at
     multi.ANGLE_RESIDUAL_PATH.write_text(
         json.dumps(data, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -226,13 +282,11 @@ def retreat_to_central(
     print("팔을 접은 상태에서 중앙 안전 자세로 복귀합니다.")
     arm.move_joints(
         calibration["camera_joints"],
-        duration=calibration_duration(
-            multi.movement_duration(joint1_delta_deg)
-        ),
+        duration=angle_move_duration(joint1_delta_deg),
     )
 
 
-def main():
+def legacy_single_sample_main():
     arm = None
     cap = None
     safe_for_automatic_return = False
@@ -257,7 +311,8 @@ def main():
         print("그리퍼는 작동하지 않습니다. 확인 후 실제 파지 높이까지 접근합니다.")
         print("OMX 로봇팔에 연결합니다.")
         arm = OmxFollower().connect()
-        print("각도별 보정 이동 속도: 기존 대비 2.0배")
+        print("촬영각 이동·중앙 복귀 속도: 원래 대비 4.0배")
+        print("접근·XYZ 미세조정 속도: 원래 대비 2.0배")
         arm.ready(duration=calibration_duration(READY_DURATION_SEC))
 
         camera_joints = calibration["camera_joints"]
@@ -284,6 +339,15 @@ def main():
             f"{angle_key:+d}도 기존 Z 보정: "
             f"{existing_z_offset * 1000:+.1f} mm"
         )
+        stored_record = load_store()["angles"].get(str(angle_key), {})
+        completed_slots = sorted(
+            int(item.get("grid_slot"))
+            for item in stored_record.get("samples", [])
+            if 1 <= int(item.get("grid_slot", -1)) <= 9
+        )
+        missing_slots = [slot for slot in range(1, 10) if slot not in completed_slots]
+        print(f"저장된 9점 칸: {completed_slots or '없음'}")
+        print(f"아직 필요한 칸: {missing_slots or '모두 완료'}")
 
         view_joints = camera_joints.copy()
         view_joints[0] = np.radians(target_joint1_deg)
@@ -291,9 +355,7 @@ def main():
         at_central_pose = False
         arm.move_joints(
             view_joints,
-            duration=calibration_duration(
-                multi.movement_duration(commanded_offset_deg)
-            ),
+            duration=angle_move_duration(commanded_offset_deg),
         )
         time.sleep(base.SETTLE_TIME_SEC)
 
@@ -306,7 +368,9 @@ def main():
         )
 
         print("청록색 보정 영역 안에 호박 하나만 놓고 STABLE일 때 M을 누르세요.")
-        selected = base.choose_pumpkin(model, cap, calibration)
+        selected = base.choose_pumpkin(
+            model, cap, calibration, show_grid=True
+        )
         cap.release()
         cap = None
         cv2.destroyAllWindows()
@@ -314,12 +378,18 @@ def main():
             print("목표 선택을 취소했습니다.")
             arm.move_joints(
                 camera_joints,
-                duration=calibration_duration(
-                    multi.movement_duration(measured_offset_deg)
-                ),
+                duration=angle_move_duration(measured_offset_deg),
             )
             at_central_pose = True
             return
+
+        grid_slot, grid_label = grid_slot_for_pixel(
+            selected, calibration["image_points"]
+        )
+        print(
+            f"현재 호박 화면 위치: {grid_slot}번 ({grid_label}). "
+            "SAVE하면 이 칸의 표본이 저장·교체됩니다."
+        )
 
         try:
             target = multi.build_rotated_target(
@@ -331,14 +401,13 @@ def main():
             )
             baseline_world_xy = target["world_target_xy"].copy()
             existing_local = target["residual_local"].copy()
+            existing_z_offset = float(target["resolved_grasp_z_residual_m"])
         except (ValueError, RuntimeError) as error:
             print(f"\n[이동 금지] 베이스 기준 목표 좌표를 만들지 못했습니다: {error}")
             print("중앙 카메라 자세로 복귀합니다.")
             arm.move_joints(
                 camera_joints,
-                duration=calibration_duration(
-                    multi.movement_duration(measured_offset_deg)
-                ),
+                duration=angle_move_duration(measured_offset_deg),
             )
             at_central_pose = True
             return
@@ -373,9 +442,7 @@ def main():
             print("중앙 안전 자세로 복귀합니다.")
             arm.move_joints(
                 camera_joints,
-                duration=calibration_duration(
-                    multi.movement_duration(measured_offset_deg)
-                ),
+                duration=angle_move_duration(measured_offset_deg),
             )
             at_central_pose = True
             return
@@ -398,9 +465,7 @@ def main():
             print("사전정렬하지 않고 중앙 자세로 복귀합니다.")
             arm.move_joints(
                 camera_joints,
-                duration=calibration_duration(
-                    multi.movement_duration(measured_offset_deg)
-                ),
+                duration=angle_move_duration(measured_offset_deg),
             )
             at_central_pose = True
             return
@@ -414,46 +479,17 @@ def main():
         )
         print("수확방향 사전정렬 완료. 팔은 접힌 자세입니다.")
 
+        print("80mm/30mm 자세는 IK 검증만 완료했으며 실제 이동하지 않습니다.")
         confirmation = input(
-            "주변이 안전하면 80mm 상공으로 이동하려면 MOVE_HIGH 입력: "
-        ).strip()
-        if confirmation != "MOVE_HIGH":
-            print("80mm 상공으로 이동하지 않고 중앙 자세로 복귀합니다.")
-            arm.move_joints(
-                camera_joints,
-                duration=calibration_duration(
-                    multi.movement_duration(
-                        np.degrees(prealign_joints[0] - camera_joints[0])
-                    )
-                ),
-            )
-            at_central_pose = True
-            return
-        arm.move_joints(
-            joints_stages[0],
-            duration=calibration_duration(multi.HIGH_MOVE_DURATION_SEC),
-        )
-
-        confirmation = input(
-            "정렬·주변이 안전하면 30mm 상공으로 바로 낮추려면 MOVE_30 입력: "
-        ).strip()
-        if confirmation != "MOVE_30":
-            multi.return_from_stage_to_central(
-                arm, calibration, prealign_joints, joints_stages, 0
-            )
-            at_central_pose = True
-            return
-        arm.move_joints(
-            joints_stages[1],
-            duration=calibration_duration(multi.LOWER_MOVE_DURATION_SEC),
-        )
-        confirmation = input(
-            "그리퍼를 작동하지 않고 기존 Z가 적용된 실제 파지 높이로 "
-            "내리려면 MOVE_GRASP 입력: "
+            "그리퍼를 작동하지 않고 사전정렬 자세에서 기존 Z가 적용된 "
+            "실제 파지 높이로 직접 이동하려면 MOVE_GRASP 입력: "
         ).strip()
         if confirmation != "MOVE_GRASP":
-            multi.return_from_stage_to_central(
-                arm, calibration, prealign_joints, joints_stages, 1
+            arm.move_joints(
+                camera_joints,
+                duration=angle_move_duration(
+                    np.degrees(prealign_joints[0] - camera_joints[0])
+                ),
             )
             at_central_pose = True
             return
@@ -463,13 +499,16 @@ def main():
         grasp_joints = solve_pose(
             arm,
             grasp_xyz,
-            joints_stages[1],
+            prealign_joints,
             calibration["pitch_rad"],
             calibration["roll_rad"],
         )
+        grasp_joints = arm.check_limits(grasp_joints, prealign_joints)
         arm.move_joints(
             grasp_joints,
-            duration=calibration_duration(multi.LOWER_MOVE_DURATION_SEC),
+            duration=calibration_duration(
+                multi.HIGH_MOVE_DURATION_SEC + multi.LOWER_MOVE_DURATION_SEC
+            ),
         )
         safe_for_automatic_return = True
         current_xy = baseline_world_xy.copy()
@@ -510,12 +549,14 @@ def main():
                     total_local,
                     multi.rotate_xy(total_local, measured_offset_deg),
                     current_z_offset,
+                    grid_slot,
                 )
                 print(
-                    f"{commanded_offset_deg:+.0f}도 보정 저장: "
-                    f"local dx={record['local_residual_mm'][0]:+.1f}, "
-                    f"dy={record['local_residual_mm'][1]:+.1f} mm, "
-                    f"z={record['grasp_z_residual_mm']:+.1f} mm"
+                    f"{commanded_offset_deg:+.0f}도 {grid_slot}번 "
+                    f"({grid_label}) 저장: local dx={total_local[0] * 1000:+.1f}, "
+                    f"dy={total_local[1] * 1000:+.1f} mm, "
+                    f"z={current_z_offset * 1000:+.1f} mm / "
+                    f"총 {record['sample_count']}/9점"
                 )
                 break
             if command == "Q":
@@ -651,6 +692,12 @@ def main():
                 except Exception as error:
                     print(f"연결 종료 중 오류: {error}")
                 print("로봇팔 연결을 종료했습니다.")
+
+
+def main():
+    from . import pumpkin_multiangle_xyz_grid_adjust
+
+    return pumpkin_multiangle_xyz_grid_adjust.main()
 
 
 if __name__ == "__main__":
