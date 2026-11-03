@@ -53,8 +53,9 @@ def make_route_node():
     node._build_bezier_trajectory = Drive._build_bezier_trajectory.__get__(node)
     for name in ('_start_next_stop_from_station', '_start_next_stop_leg',
                  '_next_stop_leg_params', '_finish_next_stop',
-                 '_control_next_stop_wait'):
+                 '_control_next_stop_wait', '_step_gate'):
         setattr(node, name, getattr(Drive, name).__get__(node))
+    node.step_mode = False
     return node
 
 
@@ -170,8 +171,9 @@ def test_tenth_stop_starts_final_camera_drive_from_actual_pose(
     node.path_detected = False  # no line fitted during ⑩
     node.state = drive.DriveState.FINAL_CAMERA_DRIVING
     for name in ('_start_final_camera_drive', '_clear_detection',
-                 '_set_camera_steering', '_in_second_next_stop'):
+                 '_set_camera_steering', '_in_second_next_stop', '_step_gate'):
         setattr(node, name, getattr(Drive, name).__get__(node))
+    node.step_mode = False
     Drive._finish_next_stop(node)
     assert node.state == drive.DriveState.FINAL_CAMERA_DRIVING
     assert node.enabled and node.sequence_active and not node.command_active
@@ -233,6 +235,8 @@ def test_final_camera_starts_straight_at_target_distance():
         finished=[],
     )
     node._start_final_straight = node.finished.append
+    node.step_mode = False
+    node._step_gate = Drive._step_gate.__get__(node)
     msg = types.SimpleNamespace(pose=types.SimpleNamespace(pose=types.SimpleNamespace(
         position=types.SimpleNamespace(x=1.0, y=2.44),
         orientation=types.SimpleNamespace(x=0.0, y=0.0, z=0.0, w=1.0))))
@@ -253,9 +257,9 @@ def test_yaml_has_final_route_target_and_camera_speed():
     )
     params = yaml.safe_load(config_path.read_text())['camera_straight_drive'][
         'ros__parameters']
-    assert params['linear_speed'] == 0.10
-    assert params['next_stop_linear_speed'] == params['linear_speed']
-    assert params['next_stop_target_forward_m'] == 0.29
+    assert params['linear_speed'] == 0.20
+    assert params['next_stop_linear_speed'] == 0.10
+    assert params['next_stop_target_forward_m'] == 0.30
     assert params['next_stop_target_right_m'] == 0.29
     assert params['next_stop_target_yaw_deg'] == -90.0
     assert params['curve_linear_speed'] == 0.04
@@ -517,3 +521,165 @@ def test_tenth_curve_does_not_slow_for_goal_and_overshoot_hands_over():
     node.current_x = 0.045  # 1.5 cm past the target
     Drive._control_curve(node, Stamp())
     assert node.finished == [True]
+
+
+def make_step_node(step_mode):
+    import threading
+    node = types.SimpleNamespace(
+        step_mode=step_mode, step_from_leg=0, state='LEG', stops=[], resumed=[], log=Log(),
+        station_departure_requested=threading.Event(),
+        station_input_active=threading.Event())
+    node.get_clock = lambda: Clock(0.0)
+    node.get_logger = lambda: node.log
+    node._publish_stop = lambda repeat=1: node.stops.append(repeat)
+    return node
+
+
+def test_step_gate_off_starts_next_leg_at_once():
+    node = make_step_node(step_mode=False)
+    Drive._step_gate(node, 2, '② 첫 지점 곡선', node.resumed.append)
+    assert len(node.resumed) == 1 and node.stops == [] and node.state == 'LEG'
+
+
+def test_step_gate_stops_and_waits_for_enter():
+    node = make_step_node(step_mode=True)
+    Drive._step_gate(node, 2, '② 첫 지점 곡선', node.resumed.append)
+    assert node.state == drive.DriveState.STEP_WAIT and node.stops == [5]
+    assert node.station_input_active.is_set()
+    Drive._control_step_wait(node, Clock(1.0))
+    assert node.resumed == []  # no ENTER yet: still stopped
+    node.station_departure_requested.set()  # ENTER
+    Drive._control_step_wait(node, Clock(2.0))
+    assert len(node.resumed) == 1 and node.step_resume is None
+    assert not node.station_departure_requested.is_set()
+
+
+def test_line_follow_runs_at_linear_speed_above_other_legs_cap():
+    node = make_final_camera_node()
+    node.state = drive.DriveState.CAMERA_DRIVING
+    node.linear_speed = 0.20  # max_linear_speed (0.10) caps the other legs only
+    Drive._control_camera_drive(node, Clock(0.1))
+    assert node.published[-1].linear.x == pytest.approx(0.20)
+
+
+def first_curve_node(x, y, yaw_deg=-60.0, progress=0):
+    """② from (0,0,0) to 0.22 ahead / 0.19 right / -60 deg, robot at (x, y)."""
+    published, finished = [], []
+    node = types.SimpleNamespace(
+        state=drive.DriveState.CURVE_TO_FIRST_POINT, curve_started_at=Stamp(),
+        curve_timeout=20.0, curve_max_travel=0.70, curve_distance=0.0,
+        curve_start_x=0.0, curve_start_y=0.0, curve_start_yaw=0.0,
+        curve_target_x=0.22, curve_target_y=-0.19, curve_target_yaw=math.radians(-60.0),
+        current_x=x, current_y=y, current_yaw=math.radians(yaw_deg),
+        curve_position_tolerance=0.02, curve_yaw_tolerance=math.radians(3.0),
+        curve_progress_index=progress, curve_lookahead=0.05, curve_sample_count=121,
+        curve_min_linear_speed=0.015, curve_linear_speed=0.04,
+        first_curve_linear_speed=0.10, first_curve_max_angular_z=0.50,
+        curve_kp_position=1.5, curve_kp_yaw=0.8, max_angular_speed=0.15,
+        control_rate=20.0, steering_command=0.0, max_linear_speed=0.10,
+        cmd_pub=types.SimpleNamespace(publish=published.append), command_active=False)
+    node._normalize_angle = Drive._normalize_angle
+    node._in_second_next_stop = Drive._in_second_next_stop.__get__(node)
+    node._finish_first_curve = lambda now, path_complete=False: finished.append(path_complete)
+    Drive._build_bezier_trajectory(node, 0.13, 0.09)
+    node.published, node.finished = published, finished
+    return node
+
+
+def test_first_curve_uses_its_own_speed_and_turn_cap():
+    node = first_curve_node(0.0, 0.0, yaw_deg=0.0)
+    Drive._control_curve(node, Stamp())
+    command = node.published[-1]
+    # Sharp start: the 0.50 turn cap, not 0.10, sets the speed (old: 0.15 cap).
+    assert 0.04 < command.linear.x <= 0.10
+    assert -0.50 <= command.angular.z < -0.15  # above the line-follow cap 0.15
+
+
+def test_first_curve_near_miss_finishes_instead_of_running_on():
+    # 2.5 cm beside the target, already past its line: outside tolerance.
+    node = first_curve_node(0.22 + 0.03, -0.19 - 0.01)
+    Drive._control_curve(node, Stamp())
+    assert node.finished == [True] and node.published == []
+
+
+def test_first_curve_inside_tolerance_finishes_normally():
+    node = first_curve_node(0.22 - 0.005, -0.19 + 0.005)
+    Drive._control_curve(node, Stamp())
+    assert node.finished == [False]
+
+
+# --- ④/⑤ profiled straight and turn -----------------------------------------
+
+def profile_node():
+    node = types.SimpleNamespace(control_rate=20.0)
+    node._profiled_speed = Drive._profiled_speed.__get__(node)
+    return node
+
+
+def test_profile_ramps_up_cruises_and_brakes_to_minimum():
+    p = profile_node()._profiled_speed
+    assert p(0.10, 0.0, 0.10, 0.02, 0.3) == pytest.approx(0.02)  # ramp starts at min
+    assert p(0.10, 0.05, 0.10, 0.02, 0.3) == pytest.approx(0.065)  # +accel/rate
+    assert p(0.08, 0.10, 0.10, 0.02, 0.3) == pytest.approx(0.10)  # cruise
+    assert p(0.005, 0.10, 0.10, 0.02, 0.3) == pytest.approx(math.sqrt(0.003))  # brake
+    assert p(0.0, 0.10, 0.10, 0.02, 0.3) == pytest.approx(0.02)  # never below min
+    assert p(0.0, 0.0, 0.04, 0.02, 0.0) == 0.04  # accel 0 = legacy constant
+
+
+def waypoint_node(**fields):
+    node = profile_node()
+    published = []
+    node.__dict__.update(
+        cmd_pub=types.SimpleNamespace(publish=published.append), published=published,
+        last_linear_command=0.10, steering_command=0.0, command_active=False,
+        waypoint_test_started_at=Clock(0.0), waypoint_test_forward_timeout=8.0,
+        waypoint_test_rotate_timeout=8.0, waypoint_motion_forward_distance=0.10,
+        waypoint_motion_rotate_angle=math.radians(45.0), waypoint_test_distance=0.0,
+        waypoint_test_yaw_change=0.0, waypoint_forward_start_yaw=0.0, current_yaw=0.0,
+        waypoint_test_forward_speed=0.10, waypoint_forward_accel=0.3,
+        waypoint_forward_min_speed=0.02, waypoint_test_rotate_speed=0.60,
+        waypoint_rotate_accel=1.0, waypoint_rotate_min_speed=0.08,
+        max_angular_speed=0.15, curve_kp_yaw=0.8)
+    node.__dict__.update(fields)
+    node._normalize_angle = Drive._normalize_angle
+    return node
+
+
+def test_waypoint_forward_holds_start_heading():
+    node = waypoint_node(current_yaw=math.radians(2.0))  # drifted left
+    Drive._control_waypoint_test_forward(node, Clock(0.1))
+    assert node.published[-1].linear.x == pytest.approx(0.10)
+    assert node.published[-1].angular.z == pytest.approx(-0.8 * math.radians(2.0))
+
+
+def test_waypoint_rotate_brakes_near_45_degrees():
+    node = waypoint_node(steering_command=-0.60,
+                         waypoint_test_yaw_change=-math.radians(44.0))
+    Drive._control_waypoint_test_rotate(node, Clock(0.1))
+    assert node.published[-1].angular.z == pytest.approx(
+        -math.sqrt(2.0 * 1.0 * math.radians(1.0)))
+    assert node.published[-1].linear.x == 0.0
+
+
+
+def test_step_gate_skips_legs_before_step_from_leg():
+    node = make_step_node(step_mode=True)
+    node.step_from_leg = 7
+    Drive._step_gate(node, 5, '⑤ 제자리 회전', node.resumed.append)
+    assert len(node.resumed) == 1 and node.state == 'LEG'  # ①~⑤ run through
+    Drive._step_gate(node, 7, '⑦ STATION 곡선', node.resumed.append)
+    assert len(node.resumed) == 1 and node.state == drive.DriveState.STEP_WAIT
+
+
+
+def test_station_curve_uses_its_own_speed_and_turn_cap():
+    node = first_curve_node(0.0, 0.0, yaw_deg=0.0)
+    node.state = drive.DriveState.STATION_MOVE_FROM_WAYPOINT
+    node.__dict__.update(
+        station_curve_linear_speed=0.10, station_curve_max_angular_z=0.50,
+        first_curve_linear_speed=0.04, first_curve_max_angular_z=0.15,
+        station_timeout=25.0, station_max_travel=0.85, station_overshoot_tolerance=0.01)
+    Drive._control_curve(node, Stamp())
+    command = node.published[-1]
+    assert 0.04 < command.linear.x <= 0.10
+    assert -0.50 <= command.angular.z < -0.15

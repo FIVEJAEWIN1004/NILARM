@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # PINKY: drive-only route test (`pinky_drive_test`, linked by setup_pinky.sh).
 # Same launch, config and safety checks as `nilarm`, but without the laptop:
-# no /harvest server, no pre-scan. At STATION (⑦) Pinky stops and waits; press
-# ENTER in this terminal to run ⑨ -> FINAL_REACHED. Ctrl+C = stop everything.
+# no /harvest server, no pre-scan. Step mode: Pinky stops after every leg
+# (①, ②, ④, ⑤, ⑦ STATION, ⑨, ⑩, ⑪) and ENTER in this terminal starts the next.
+# Ctrl+C = stop everything. Continuous run: pinky_drive_test step_mode:=false
 #   pinky_drive_test [competition.launch.py args]
 repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
-echo "[DRIVE TEST] 주행 단독 테스트 (노트북/로봇팔 없음). STATION 정지 후 ENTER = 출발"
+echo "[DRIVE TEST] 주행 단독 테스트 (노트북/로봇팔 없음). 단계마다 정지, ENTER = 다음 단계"
 NILARM_DRIVE_ONLY=1 exec "${repo}/src/nilarm_bringup/scripts/nilarm" \
-    use_harvest_action:=false "$@"
+    use_harvest_action:=false step_mode:=true "$@"
