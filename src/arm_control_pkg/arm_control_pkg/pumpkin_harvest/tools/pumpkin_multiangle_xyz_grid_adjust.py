@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Calibrate all nine screen-position XYZ samples at one scan angle."""
+"""Calibrate and grasp-verify nine screen-position XYZ samples at one angle."""
 
 from __future__ import annotations
 
@@ -13,6 +13,13 @@ from omx_f import OmxFollower
 from .. import pumpkin_detected_approach_validation as base
 from .. import pumpkin_multiangle_approach_validation as multi
 from . import pumpkin_multiangle_xy_micro_adjust as common
+
+
+VERIFY_LIFT_M = 0.030
+VERIFY_HOLD_SEC = 1.0
+VERIFY_GRIPPER_CLOSE_DURATION_SEC = 4.0
+VERIFY_GRIPPER_OPEN_DURATION_SEC = 3.0
+VERIFY_LIFT_DURATION_SEC = 6.0
 
 
 def completed_slots(angle: int) -> list[int]:
@@ -274,6 +281,132 @@ def calibrate_one_sample(
     return saved, stop_session
 
 
+def verify_saved_grid(
+    arm,
+    model,
+    calibration,
+    existing_residuals,
+    commanded_offset_deg,
+    measured_offset_deg,
+    view_joints,
+):
+    """Grasp, lift 30 mm, replace and release one verification pumpkin."""
+    print("\n========== 9점 XYZ 실제 파지 검증 ==========")
+    print("9점 사이를 포함해 검증하고 싶은 화면 위치에 호박을 놓으세요.")
+    selected = select_one(model, calibration)
+    if selected is None:
+        return False, True
+
+    target = multi.build_rotated_target(
+        calibration,
+        selected,
+        commanded_offset_deg,
+        measured_offset_deg,
+        existing_residuals,
+    )
+    if not target["used_spatial_xyz_residual"]:
+        raise RuntimeError("9점 위치별 XYZ 보정이 적용되지 않아 검증을 중단합니다.")
+
+    world_xy = target["world_target_xy"].copy()
+    z_offset = float(target["resolved_grasp_z_residual_m"])
+    start_joints = np.asarray(arm.joints(), dtype=float)
+    (
+        prealign_joints,
+        prealign_delta_deg,
+        _joints_stages,
+        _deltas,
+    ) = multi.plan_fixed_pose_stages_from_folded_pose(
+        arm,
+        target["xyz_stages"],
+        start_joints,
+        calibration["pitch_rad"],
+        calibration["roll_rad"],
+    )
+    grasp_joints = common.solve_pose(
+        arm,
+        common.make_xyz(calibration, world_xy, z_offset),
+        prealign_joints,
+        calibration["pitch_rad"],
+        calibration["roll_rad"],
+    )
+    grasp_joints = arm.check_limits(grasp_joints, prealign_joints)
+    lift_joints = common.solve_pose(
+        arm,
+        common.make_xyz(
+            calibration, world_xy, z_offset + VERIFY_LIFT_M
+        ),
+        grasp_joints,
+        calibration["pitch_rad"],
+        calibration["roll_rad"],
+    )
+    lift_joints = arm.check_limits(lift_joints, grasp_joints)
+
+    print("검증 호박 위치 확정 후 수확방향 사전정렬 자세로 자동 이동합니다.")
+    arm.move_joints(
+        prealign_joints,
+        duration=common.calibration_duration(
+            multi.movement_duration(prealign_delta_deg)
+        ),
+    )
+    confirmation = input(
+        "실제 파지·30mm 시험 리프트·원위치 놓기를 실행하려면 "
+        "VERIFY_GRASP 입력: "
+    ).strip().upper()
+    if confirmation != "VERIFY_GRASP":
+        arm.move_joints(
+            view_joints,
+            duration=common.angle_move_duration(
+                np.degrees(prealign_joints[0] - view_joints[0])
+            ),
+        )
+        return False, True
+
+    print("[검증] 저장된 9점 XYZ 보간 위치로 이동합니다.")
+    arm.move_joints(
+        grasp_joints,
+        duration=common.calibration_duration(
+            multi.HIGH_MOVE_DURATION_SEC + multi.LOWER_MOVE_DURATION_SEC
+        ),
+    )
+    print("[검증] 전류 제한으로 그리퍼를 닫습니다.")
+    arm.close_gripper(
+        duration=VERIFY_GRIPPER_CLOSE_DURATION_SEC,
+        stall_guard=True,
+        wait=True,
+    )
+    print("[검증] 동일 XY에서 호박을 30mm 들어 올립니다.")
+    arm.move_joints(lift_joints, duration=VERIFY_LIFT_DURATION_SEC)
+    time.sleep(VERIFY_HOLD_SEC)
+    print("[검증] 호박을 원래 위치에 내려놓습니다.")
+    arm.move_joints(grasp_joints, duration=VERIFY_LIFT_DURATION_SEC)
+    print("[검증] 그리퍼를 열어 호박을 놓습니다.")
+    arm.open_gripper(
+        duration=VERIFY_GRIPPER_OPEN_DURATION_SEC,
+        stall_guard=True,
+        wait=True,
+    )
+    return_to_same_view(
+        arm,
+        calibration,
+        world_xy,
+        grasp_joints,
+        prealign_joints,
+        view_joints,
+    )
+
+    result = input(
+        "파지 검증 성공이면 PASS, 문제 구역을 다시 보정하려면 "
+        "RECALIBRATE 입력: "
+    ).strip().upper()
+    if result == "PASS":
+        print("9점 XYZ 실제 파지 검증을 통과했습니다.")
+        return True, False
+    if result == "RECALIBRATE":
+        return False, False
+    print("PASS/RECALIBRATE가 아니므로 검증 세션을 종료합니다.")
+    return False, True
+
+
 def main():
     arm = None
     at_central = False
@@ -313,6 +446,7 @@ def main():
         measured = np.asarray(arm.joints(), dtype=float)
         measured_offset = float(np.degrees(measured[0])) - base_joint1_deg
 
+        all_nine_completed = False
         while True:
             done = completed_slots(angle_key)
             missing = [slot for slot in range(1, 10) if slot not in done]
@@ -320,6 +454,7 @@ def main():
             print(f"남은 칸: {missing or '없음'}")
             if not missing:
                 print("이 각도의 9점 XYZ 보정이 모두 완료됐습니다.")
+                all_nine_completed = True
                 break
             # From here until the helper returns, do not assume a safe pose;
             # an exception during direct approach must not trigger an
@@ -339,6 +474,35 @@ def main():
                 break
             if not saved:
                 print("표본을 저장하지 않았습니다.")
+
+        while all_nine_completed:
+            at_view = False
+            verified, stop = verify_saved_grid(
+                arm,
+                model,
+                calibration,
+                existing_residuals,
+                angle,
+                measured_offset,
+                view_joints,
+            )
+            at_view = True
+            if verified or stop:
+                break
+            print("문제가 있었던 화면 구역의 표본을 다시 보정합니다.")
+            at_view = False
+            _saved, stop = calibrate_one_sample(
+                arm,
+                model,
+                calibration,
+                existing_residuals,
+                angle,
+                measured_offset,
+                view_joints,
+            )
+            at_view = True
+            if stop:
+                break
 
         arm.move_joints(
             camera_joints,

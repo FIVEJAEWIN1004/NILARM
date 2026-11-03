@@ -47,6 +47,17 @@ def test_calibration_keeps_only_move_grasp_confirmation():
     assert 'MOVE_GRASP 입력' in source
 
 
+def test_completed_grid_runs_real_grasp_verification():
+    source = inspect.getsource(grid_adjust.verify_saved_grid)
+    assert grid_adjust.VERIFY_LIFT_M == pytest.approx(0.030)
+    assert 'VERIFY_GRASP 입력' in source
+    assert "arm.close_gripper" in source
+    assert "arm.open_gripper" in source
+    assert "z_offset + VERIFY_LIFT_M" in source
+    assert '"PASS"' in source
+    assert '"RECALIBRATE"' in source
+
+
 def test_grid_session_tracks_completed_slots(tmp_path, monkeypatch):
     path = tmp_path / "residual.json"
     path.write_text(
