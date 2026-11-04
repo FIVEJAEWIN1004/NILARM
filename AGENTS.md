@@ -94,7 +94,6 @@ KSAM 대회용 **호박 수확 로봇** (ROS 2 Jazzy).
 | `ksam_hsv_calibrate` | 노트북 | HSV 캘리브레이터 실행 후 YAML을 Pinky로 배포 (`--no-deploy` 가능) |
 | `start_remote_hsv_calibrate.sh` | Pinky | Pinky에서 `ksam_hsv_calibrate` 입력 시: 카메라만 켜고 노트북 캘리브레이터를 SSH로 띄움 |
 
-`tools/run_pinky_course.sh` — 예전 코스 실행 스크립트 (git 미추적).
 
 ## 빌드 / 테스트
 
@@ -122,4 +121,4 @@ python3 -m pytest -q src/arm_control_pkg/test/test_arm_camera.py
 - **안전 우선**: drive 노드는 DISABLED로 시작하고 `/camera_drive/enable` 전엔 zero Twist만 냄. 게이트 조건을 약화시키지 말 것.
 - 실물 하드웨어/캘리브레이션 값(yaml 튜닝값, `pumpkin_harvest/*.json`)은 현장 측정 결과임. 이유 없이 바꾸지 말 것.
 - `*.bak*` 파일은 수정 전 백업본 (git 미추적). 참고만 하고 편집 대상 아님.
-- `archive/` (`COLCON_IGNORE`) — 예전 `drive_pkg`, `nav_pkg`(Nav2/IR 정렬/라인 추종). 빌드 안 됨. (`archive/vision_pkg`는 `src/vision_pkg` 사본이라 git 미추적.)
+- `archive/` (`COLCON_IGNORE`) — 예전 `drive_pkg`, `nav_pkg`(Nav2/IR 정렬/라인 추종), `tools/run_pinky_course.sh`(예전 코스 실행), `green_test.jpg`. 빌드 안 됨.
