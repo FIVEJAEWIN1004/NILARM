@@ -309,8 +309,13 @@ def wait_until_arm_settled(
     stable_window_sec: float = 0.15,
     sample_period_sec: float = 0.05,
     cancel_callback=None,
+    position_joint_indices=None,
 ) -> bool:
-    """Return early on stable feedback, falling back to the original timeout."""
+    """Return early on stable feedback, falling back to the original timeout.
+
+    position_joint_indices limits the position check to those joints (None =
+    all); the velocity check always covers every joint.
+    """
     started = time.monotonic()
     deadline = started + float(max_settle_sec)
     target = np.asarray(target_joints, dtype=float)
@@ -344,9 +349,10 @@ def wait_until_arm_settled(
             velocity = float(
                 np.max(np.abs(np.degrees(current - previous))) / dt
             )
-        position_error = float(
-            np.max(np.abs(np.degrees(current - target)))
-        )
+        position_diff = current - target
+        if position_joint_indices is not None:
+            position_diff = position_diff[list(position_joint_indices)]
+        position_error = float(np.max(np.abs(np.degrees(position_diff))))
         elapsed = now - started
         stable = (
             elapsed >= float(min_settle_sec)

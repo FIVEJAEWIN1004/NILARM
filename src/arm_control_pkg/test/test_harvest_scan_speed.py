@@ -78,11 +78,18 @@ def test_omx_initialize_uses_dedicated_six_second_sequence(monkeypatch):
     camera_joints = np.arange(5, dtype=float)
 
     class RecordingArm:
-        def gripper(self, value, duration):
-            events.append(("gripper", value, duration))
+        busy_polls = 2
+
+        def gripper(self, value, duration, wait=True):
+            events.append(("gripper", value, duration, wait))
 
         def move_joints(self, joints, duration):
             events.append(("move", tuple(np.asarray(joints)), duration))
+
+        def gripper_busy(self):
+            # gripper still finishing after READY: wait before remembering it
+            self.busy_polls -= 1
+            return self.busy_polls >= 0
 
     monkeypatch.setattr(
         scan,
@@ -103,12 +110,15 @@ def test_omx_initialize_uses_dedicated_six_second_sequence(monkeypatch):
             "gripper",
             scan.omx_robot.GRIPPER_READY,
             scan.INITIAL_GRIPPER_DURATION_SEC,
+            False,  # runs during the READY move
         ),
         (
             "move",
             tuple(np.asarray(scan.omx_robot.READY)),
             scan.INITIAL_READY_DURATION_SEC,
         ),
+        ("settle", 0.01),
+        ("settle", 0.01),
         ("remember_gripper",),
         (
             "move",
@@ -145,3 +155,38 @@ def test_post_scan_return_to_centre_caps_requested_2x_at_servo_limit():
     assert duration == pytest.approx(5.916, abs=0.001)
     assert 130 / duration * 1.875 <= 41.2
     assert speed.scan_rotation_duration(30) == pytest.approx(1.730769, rel=1e-5)
+
+
+def test_scan_settle_passes_one_tick_jitter_and_reports_timeout(monkeypatch, capsys):
+    clock = {"t": 0.0}
+    monkeypatch.setattr(speed.v2.time, "monotonic", lambda: clock["t"])
+    monkeypatch.setattr(
+        speed.v2.time, "sleep", lambda s: clock.__setitem__("t", clock["t"] + s))
+    tick = np.radians(0.088)
+    target = np.zeros(5)
+
+    class JitterArm:  # stopped at the target, joint1 flips one encoder tick
+        n = 0
+
+        def joints(self):
+            self.n += 1
+            return np.array([tick * (self.n % 2), 0, 0, 0, 0], dtype=float)
+
+    assert speed.settle_after_scan_move(JitterArm(), target, 1.0) is True
+    assert clock["t"] <= 0.61  # 3-4 samples; was the full 1.0 s (50 ms / 0.5 deg/s)
+
+    class SaggingArm:  # field log: still, joint3 holds a constant 2.3 deg sag
+        def joints(self):
+            return np.radians([0.45, 0.44, 2.3, 0.09, 0.26])
+
+    clock["t"] = 0.0
+    assert speed.settle_after_scan_move(SaggingArm(), target, 1.0) is True
+    assert clock["t"] <= 0.61
+
+    class Joint1ShortArm:  # still, but joint1 has not reached the view
+        def joints(self):
+            return np.radians([2.0, 0, 0, 0, 0])
+
+    clock["t"] = 0.0
+    assert speed.settle_after_scan_move(Joint1ShortArm(), target, 1.0) is False
+    assert "관절별 목표 오차" in capsys.readouterr().out

@@ -301,12 +301,20 @@ def warm_up_detector(model) -> None:
 
 
 def initialize_arm_for_scan(arm, camera_joints) -> float:
-    """Prepare the gripper and arm for the competition scan."""
+    """Prepare the gripper and arm for the competition scan.
+
+    The gripper (1.5 s) runs in the driver's background thread during the
+    READY move (2.3 s; the bus is locked per transfer), then is awaited before
+    its width is remembered.
+    """
     arm.gripper(
         omx_robot.GRIPPER_READY,
         duration=INITIAL_GRIPPER_DURATION_SEC,
+        wait=False,
     )
     arm.move_joints(omx_robot.READY, duration=INITIAL_READY_DURATION_SEC)
+    while arm.gripper_busy():
+        time.sleep(0.01)
     default_gripper_value = normalized_gripper_value(arm)
     arm.move_joints(
         camera_joints,

@@ -101,6 +101,18 @@ ARM_SETTLE_MIN_SEC = 0.10
 ARM_SETTLE_STABLE_WINDOW_SEC = 0.15
 ARM_SETTLE_POSITION_TOLERANCE_DEG = 0.5
 ARM_SETTLE_VELOCITY_TOLERANCE_DPS = 0.5
+# Scan views only. One encoder tick (0.088 deg) per 50 ms sample reads as
+# 1.76 deg/s, so the 0.5 deg/s / 50 ms check above never passed at a scan view
+# (every view waited the full 1.0 s). Sample every 0.15 s: one tick of jitter
+# = 0.59 deg/s passes, real motion > 1 deg/s does not.
+SCAN_SETTLE_SAMPLE_PERIOD_SEC = 0.15
+SCAN_SETTLE_VELOCITY_TOLERANCE_DPS = 1.0
+# Position is checked on joint1 only: field logs showed joint3 holding a
+# constant ~2.3 deg sag at every view (also present when calibrated), which
+# kept every view at the 1.0 s timeout. Joint1 is what the scan geometry
+# measures; all joints must still be still (velocity check).
+SCAN_SETTLE_POSITION_TOLERANCE_DEG = 1.0
+SCAN_SETTLE_POSITION_JOINTS = (0,)
 
 _ORIGINAL_MOVEMENT_DURATION = scan.multi.movement_duration
 # Pre-scan only (v5 sets it per run): called once, holding the first pumpkin
@@ -280,16 +292,29 @@ def settle_after_scan_move(
     if not ENABLE_ADAPTIVE_SCAN_SETTLE:
         time.sleep(float(max_settle_sec))
         return False
-    return v2.wait_until_arm_settled(
+    settled = v2.wait_until_arm_settled(
         arm,
         target_joints,
         min_settle_sec=ARM_SETTLE_MIN_SEC,
         max_settle_sec=max_settle_sec,
-        position_tolerance_deg=ARM_SETTLE_POSITION_TOLERANCE_DEG,
-        velocity_tolerance_dps=ARM_SETTLE_VELOCITY_TOLERANCE_DPS,
+        position_tolerance_deg=SCAN_SETTLE_POSITION_TOLERANCE_DEG,
+        velocity_tolerance_dps=SCAN_SETTLE_VELOCITY_TOLERANCE_DPS,
         stable_window_sec=ARM_SETTLE_STABLE_WINDOW_SEC,
+        sample_period_sec=SCAN_SETTLE_SAMPLE_PERIOD_SEC,
         cancel_callback=cancel_callback,
+        position_joint_indices=SCAN_SETTLE_POSITION_JOINTS,
     )
+    if not settled:
+        # Field diagnosis: which joint kept the scan settle at its timeout.
+        try:
+            error = np.degrees(
+                np.asarray(arm.joints(), dtype=float)
+                - np.asarray(target_joints, dtype=float))
+            print("[스캔 안정 대기] 시간 초과, 관절별 목표 오차 [deg]:",
+                  np.round(error, 2))
+        except Exception:  # noqa: BLE001 - diagnostics only
+            pass
+    return settled
 
 
 def prepare_optimized_harvest_targets(

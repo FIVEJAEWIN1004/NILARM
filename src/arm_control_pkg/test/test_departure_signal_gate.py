@@ -149,6 +149,9 @@ class FakeOmx(RecordingArm):
     def close_gripper(self, **_kwargs):
         self.events.append(("close",))
 
+    def gripper_busy(self):
+        return False
+
     def park(self, duration=None):
         self.events.append(("park",))
 
