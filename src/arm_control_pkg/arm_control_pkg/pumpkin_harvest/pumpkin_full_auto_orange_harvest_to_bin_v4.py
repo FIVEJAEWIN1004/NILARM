@@ -606,9 +606,10 @@ def deposit_open_then_rise(
                 minimum_duration=BIN_HOVER_MIN_DURATION_SEC,
             ),
         )
-    settle_after_arm_move(
-        arm, v2._BIN_HOVER_JOINTS, BIN_WAYPOINT_SETTLE_SEC
-    )
+    # No settle at bin hover: the descent below starts from rest on a slow
+    # quintic, and the pre-scan gate (first pumpkin) waits here anyway.
+    # Saves BIN_WAYPOINT_SETTLE_SEC (0.3 s) per pumpkin; the settles at the
+    # drop pose (before release) and after the rise are kept.
 
     gate, wait_at_hover_before_first_drop = (
         wait_at_hover_before_first_drop, None)
