@@ -11,6 +11,8 @@ if ! command -v ros2 >/dev/null; then
 fi
 if [[ -z "${NILARM_LAPTOP_HOST}" && -f "${repo}/.nilarm_remote_env" ]]; then
     source "${repo}/.nilarm_remote_env"
+    # Any Wi-Fi: reach back the laptop this SSH session came from.
+    [[ -n "${SSH_CLIENT}" ]] && NILARM_LAPTOP_HOST="${SSH_CLIENT%% *}"
 fi
 
 servers="$(timeout 10 ros2 action info /harvest 2>/dev/null \
@@ -26,7 +28,7 @@ if [[ -z "${NILARM_LAPTOP_HOST}" || -z "${NILARM_LAPTOP_USER}" ]]; then
 fi
 key="${NILARM_SSH_KEY:-$HOME/.ssh/nilarm_laptop_ed25519}"
 ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes
-          -o ConnectTimeout="${NILARM_SSH_TIMEOUT:-5}"
+          -o HostKeyAlias=nilarm-laptop -o ConnectTimeout="${NILARM_SSH_TIMEOUT:-5}"
           -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
 [[ -f "${key}" ]] && ssh_opts+=(-i "${key}" -o IdentitiesOnly=yes)
 

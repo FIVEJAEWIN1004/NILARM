@@ -4,11 +4,16 @@
 #   source scripts/activate_pumpkin_harvest.sh; export ROS_DOMAIN_ID=99
 #   python3 -m arm_control_pkg.pumpkin_harvest.harvest_action_server \
 #     --ros-args -p harvest_all_detected:=true
-# usage: run_harvest_server.sh start | check | status | build | restart | prescan
+# usage: run_harvest_server.sh start | check | status | build | restart | prescan | match | warmup
 #   build:   colcon build --packages-up-to arm_control_pkg in the OMX env
 #   restart: SIGTERM exactly the one running server (PID file / exact cmdline),
 #            start the current code, wait until /harvest has exactly 1 server
 #   prescan: ask the running server for an OMX pre-scan (/harvest/prescan)
+#   match:   ksam_nilarm_7th's one call: build only if sources changed, reuse the
+#            running server if it predates no source change and accepts the
+#            pre-scan, else restart it (READY from its log) and pre-scan again.
+#            exit 0 = server + pre-scan ok, 3 = server ok but pre-scan failed
+#   warmup:  ksam_nilarm_ready: build if changed, fresh server, no pre-scan
 # Log: <repo>/.nilarm_logs/harvest_server.log, PID: harvest_server.pid (git-ignored)
 repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 log_dir="${repo}/.nilarm_logs"
@@ -102,6 +107,49 @@ wait_harvest_ready() {  # exactly one /harvest server on the ROS graph
     return 1
 }
 
+wait_log_ready() {  # $1 = log size before start: READY printed by the new server
+    local pid deadline=$(( SECONDS + ${NILARM_HARVEST_READY_SEC:-30} ))
+    pid="$(cat "${pid_file}")"
+    until tail -c +$(( $1 + 1 )) "${log}" | grep -q 'Harvest Action Server READY'; do
+        if ! kill -0 "${pid}" 2>/dev/null; then
+            echo "FAIL: harvest server exited before READY; last log lines:"
+            tail -n 20 "${log}"
+            return 1
+        fi
+        (( SECONDS >= deadline )) && { echo "FAIL: /harvest not READY; log ${log}"; return 1; }
+        sleep 0.2
+    done
+    echo "OK: /harvest server READY (pid ${pid})"
+}
+
+prescan_request() {  # $1 = timeout s; prints the server's message
+    local reply
+    reply="$(in_harvest_env timeout "$1" ros2 service call /harvest/prescan \
+        std_srvs/srv/Trigger "{}" 2>&1)"
+    grep -o "message='[^']*'" <<<"${reply}" || echo "no response"
+    grep -q 'success=True' <<<"${reply}"
+}
+
+newer_src() {  # prints a server source/env file changed after file $1 (none: empty)
+    (cd "${repo}" && find src/arm_control_pkg src/interfaces_pkg src/vision_pkg/models \
+        scripts/activate_pumpkin_harvest.sh \
+        -type f -newer "$1" -not -path '*/__pycache__/*' -not -path '*/.pytest_cache/*' \
+        -not -path '*/test/*' -print -quit 2>/dev/null)
+}
+
+build_if_changed() {
+    local stamp="${log_dir}/build.stamp" changed
+    changed="$(newer_src "${stamp}")"
+    if [[ ! -f "${stamp}" || -n "${changed}" ]]; then
+        echo "build: ${changed:-first build} changed"
+        touch "${stamp}.new"  # edits made during the build still count next time
+        bash "$0" build || return 1
+        mv "${stamp}.new" "${stamp}"
+    else
+        echo "build: skipped (no source change)"
+    fi
+}
+
 case "${1:-start}" in
 status)
     pids="$(server_pids)" && echo "running: ${pids//$'\n'/ }" || { echo "not running"; exit 1; }
@@ -143,13 +191,41 @@ restart)
     echo "log: ${log}"
     ;;
 prescan)
-    reply="$(in_harvest_env timeout 15 ros2 service call /harvest/prescan \
-        std_srvs/srv/Trigger "{}" 2>&1)"
-    grep -o "message='[^']*'" <<<"${reply}" || echo "no response"
-    grep -q 'success=True' <<<"${reply}" || exit 1
+    prescan_request 15 || exit 1
+    ;;
+match)
+    mkdir -p "${log_dir}"
+    exec 9>"${log_dir}/harvest_server.lock"
+    flock -w 20 9 || { echo "FAIL: another start is still in progress"; exit 1; }
+    build_if_changed || exit 1
+    pids="$(server_pids)"
+    if [[ -n "${pids}" && "${pids}" == "$(cat "${pid_file}" 2>/dev/null)" \
+          && -z "$(newer_src "${pid_file}")" ]]; then
+        echo "reusing harvest server pid ${pids} (no source change since start)"
+        prescan_request "${NILARM_REUSE_PRESCAN_SEC:-6}" && exit 0
+        echo "reused server did not accept the pre-scan: restarting it"
+    fi
+    stop_server || exit 1
+    log_size="$(stat -c %s "${log}" 2>/dev/null || echo 0)"
+    start_server || exit 1
+    wait_log_ready "${log_size}" || exit 1
+    prescan_request 15 || exit 3
+    ;;
+warmup)
+    # Before the match, on the match Wi-Fi: always a fresh server (a reused
+    # one may still sit on the old network), never the pre-scan (arm stays
+    # still). The next `match` then reuses it and only asks for the pre-scan.
+    mkdir -p "${log_dir}"
+    exec 9>"${log_dir}/harvest_server.lock"
+    flock -w 20 9 || { echo "FAIL: another start is still in progress"; exit 1; }
+    build_if_changed || exit 1
+    stop_server || exit 1
+    log_size="$(stat -c %s "${log}" 2>/dev/null || echo 0)"
+    start_server || exit 1
+    wait_log_ready "${log_size}" || exit 1
     ;;
 *)
-    echo "usage: $0 start|check|status|build|restart|prescan" >&2
+    echo "usage: $0 start|check|status|build|restart|prescan|match|warmup" >&2
     exit 2
     ;;
 esac

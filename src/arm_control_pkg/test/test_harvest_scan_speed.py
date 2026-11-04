@@ -11,30 +11,48 @@ from arm_control_pkg.pumpkin_harvest import (
 )
 
 
-def test_scan_step_is_1_3x_faster_than_previous_scan_speed():
-    transit_seconds = speed.transit_rotation_duration(30)
-    step_seconds = speed.scan_step_rotation_duration(30)
-
-    assert transit_seconds == pytest.approx(3.6)
-    assert speed.SCAN_STEP_SPEED_MULTIPLIER == pytest.approx(2.704)
-    assert step_seconds == pytest.approx(transit_seconds / 2.704)
-    assert step_seconds == pytest.approx(1.331361, rel=1e-5)
-    previous_scan_seconds = transit_seconds / 2.08
-    assert previous_scan_seconds / step_seconds == pytest.approx(1.3)
+def trapezoid_points(delta_deg, hz=100.0):
+    q1 = np.radians([delta_deg, 0.0, 0.0, 0.0, 0.0])
+    return list(speed.joint_trajectory.trapezoid_path(
+        np.zeros(5), q1, speed.SCAN_TRAPEZOID_SPEED_DPS,
+        speed.SCAN_TRAPEZOID_ACCEL_DPS2, hz)), q1
 
 
 @pytest.mark.parametrize(
-    ("delta_deg", "expected"),
-    [(30, 1.331361), (60, 2.662722), (90, 3.994083)],
+    ("delta_deg", "seconds"),
+    # old quintic: 1.33 s / 5.33 s; the first -140 deg entry ~4.0 s (servo-capped)
+    [(30, 0.97), (-120, 3.28), (-140, 3.79), (3, 0.25)],
 )
-def test_scan_step_keeps_2_704x_ratio(delta_deg, expected):
-    transit_seconds = speed.transit_rotation_duration(delta_deg)
-    step_seconds = speed.scan_step_rotation_duration(delta_deg)
+def test_scan_view_trapezoid_time_limits_and_exact_end(delta_deg, seconds):
+    points, q1 = trapezoid_points(delta_deg)
+    path = np.degrees(np.asarray([np.zeros(5)] + points))
+    velocity = np.diff(path, axis=0) * 100.0
+    acceleration = np.diff(velocity, axis=0) * 100.0
 
-    assert step_seconds == pytest.approx(transit_seconds / 2.704)
-    assert step_seconds == pytest.approx(expected, rel=1e-5)
-    assert speed.scan_target_rotation_duration(-110, delta_deg) == (
-        pytest.approx(step_seconds))
+    assert len(points) / 100.0 == pytest.approx(seconds, abs=0.011)
+    np.testing.assert_array_equal(points[-1], q1)
+    assert np.max(np.abs(velocity)) <= speed.SCAN_TRAPEZOID_SPEED_DPS + 1e-6
+    # discrete 100 Hz differencing smears the ramp corners by one sample
+    assert np.max(np.abs(acceleration)) <= speed.SCAN_TRAPEZOID_ACCEL_DPS2 * 1.01
+    assert np.all(np.diff(path[:, 0]) * np.sign(delta_deg) >= -1e-9)  # monotonic
+
+
+def test_scan_trapezoid_stays_inside_servo_profile():
+    assert speed.SCAN_TRAPEZOID_SPEED_DPS < speed.v2.SERVO_PROFILE_VELOCITY_DPS
+    assert speed.SCAN_TRAPEZOID_ACCEL_DPS2 < speed.v2.SERVO_PROFILE_ACCELERATION_DPS2
+    with pytest.raises(ValueError):
+        speed.joint_trajectory.move_joints_trapezoid(
+            object(), np.zeros(5), 50.0, 200.0)
+
+
+def test_scan_views_use_trapezoid_hook(monkeypatch):
+    calls = []
+    monkeypatch.setattr(scan, "move_to_scan_view", scan.move_to_scan_view)
+    monkeypatch.setattr(speed.joint_trajectory, "move_joints_trapezoid",
+                        lambda *args: calls.append(args))
+    speed.configure_selective_speed()
+    scan.move_to_scan_view("arm", "joints", 70.0, 120.0)
+    assert calls == [("arm", "joints", 39.0, 200.0)]
 
 
 def test_speed_configuration_separates_scan_from_other_rotations(monkeypatch):
@@ -113,10 +131,6 @@ def test_omx_initialize_uses_dedicated_six_second_sequence(monkeypatch):
 
 def test_scan_and_return_timings():
     assert scan.base.SETTLE_TIME_SEC == pytest.approx(1.0)
-    assert speed.FIRST_SCAN_ENTRY_SPEED_MULTIPLIER == pytest.approx(2.0)
-    first_entry = speed.scan_target_rotation_duration(-140, -140)
-    assert first_entry == pytest.approx(3.106509, rel=1e-5)
-    assert 4.038462 / first_entry == pytest.approx(1.3, rel=1e-5)
 
 
 def test_post_scan_return_to_centre_caps_requested_2x_at_servo_limit():

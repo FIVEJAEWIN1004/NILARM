@@ -124,18 +124,36 @@ def physical_directions(world_xy):
     }
 
 
+JOG_COMMAND_ALIASES = {
+    "W": "TOWARD_BASE",
+    "X": "AWAY_BASE",
+    "A": "BASE_LEFT",
+    "D": "BASE_RIGHT",
+    "R": "Z_UP",
+    "F": "Z_DOWN",
+    "2": "STEP_2",
+    "5": "STEP_5",
+    "U": "UNDO",
+    "S": "SAVE",
+    "Q": "Q",
+}
+
+
+def normalize_jog_command(value):
+    command = str(value).strip().upper().replace("-", "_")
+    return JOG_COMMAND_ALIASES.get(command, command)
+
+
 def print_controls(step_m):
     print("\n========== 파지 위치 XYZ 미세조정 ==========")
     print(f"현재 한 번 이동량: {step_m * 1000:.0f} mm")
-    print("TOWARD_BASE : 로봇 베이스 쪽")
-    print("AWAY_BASE   : 로봇 베이스에서 멀어지는 쪽")
-    print("BASE_LEFT   : 베이스에서 그리퍼를 볼 때 왼쪽")
-    print("BASE_RIGHT  : 베이스에서 그리퍼를 볼 때 오른쪽")
-    print("Z_UP / Z_DOWN : 그리퍼를 항상 2mm 위 / 아래로 이동")
-    print("STEP_2 / STEP_5 : 한 번 이동량 2mm / 5mm")
-    print("UNDO        : 직전 미세이동 취소")
-    print("SAVE        : 이 촬영각의 보정값 저장 후 복귀")
-    print("Q           : 저장하지 않고 복귀")
+    print("W / X : 로봇 베이스 쪽 / 베이스에서 멀어지는 쪽")
+    print("A / D : 베이스 기준 왼쪽 / 오른쪽")
+    print("R / F : 그리퍼 2mm 위 / 아래")
+    print("2 / 5 : 한 번 이동량 2mm / 5mm")
+    print("U     : 직전 미세이동 취소")
+    print("S     : 이 촬영각의 보정값 저장 후 복귀")
+    print("Q     : 저장하지 않고 복귀")
     print("그리퍼 동작 없음 / Z 총 추가조정은 위·아래 30mm 이내")
     print("============================================")
 

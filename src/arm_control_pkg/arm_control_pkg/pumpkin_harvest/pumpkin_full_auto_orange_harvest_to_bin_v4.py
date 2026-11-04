@@ -3,7 +3,7 @@
 
 The newly re-taught bin poses are used exactly as saved.  Preparation and
 normal arm transit run 1.5x faster than the v3 speed.  Moves into scan views
-run another 2.704x faster and the post-scan return another 2.08x.  Bin hover,
+are servo-limit trapezoids and the post-scan return runs another 2.08x.  Bin hover,
 bin descent and the open-gripper rise are timed from their joint change at
 v2.TARGET_AVERAGE_JOINT_SPEED_DPS.  Pumpkin descent retains the v3
 speed.  Gripper timing is unchanged.  After release, the gripper rises to bin
@@ -17,6 +17,7 @@ import time
 
 import numpy as np
 
+from . import joint_trajectory
 from . import pumpkin_auto_scan_count_orange_harvest as scan
 from . import pumpkin_full_auto_orange_harvest_to_bin_v2 as v2
 
@@ -27,15 +28,15 @@ TRANSIT_DURATION_FACTOR = 0.60
 # Post-scan return to centre (and cancel return) keep the 2.08x speed.
 SCAN_EXTRA_SPEED_MULTIPLIER = 2.08
 POST_SCAN_RETURN_SPEEDUP = 2.0
-# Moves between scan views run another 1.3x faster than the return.
-SCAN_STEP_SPEED_MULTIPLIER = SCAN_EXTRA_SPEED_MULTIPLIER * 1.3
-FIRST_SCAN_ENTRY_SPEED_MULTIPLIER = 2.0
 SCAN_ROTATION_DURATION_FACTOR = (
     TRANSIT_DURATION_FACTOR / SCAN_EXTRA_SPEED_MULTIPLIER
 )
-SCAN_STEP_DURATION_FACTOR = (
-    TRANSIT_DURATION_FACTOR / SCAN_STEP_SPEED_MULTIPLIER
-)
+# Every move into a scan view (incl. the 120 deg -50 -> +70 crossing) is a
+# trapezoid at 95 % of the servo profile (41.2 deg/s, 215 deg/s^2), so the
+# servo follows without lag. The old quintic peaked at 1.875x its average:
+# 30 deg 1.33 -> 0.96 s, 120 deg 5.33 -> 3.27 s, first -140 deg ~4.0 -> 3.78 s.
+SCAN_TRAPEZOID_SPEED_DPS = 39.0
+SCAN_TRAPEZOID_ACCEL_DPS2 = 200.0
 DESCENT_DURATION_FACTOR = 0.90
 MIN_ROTATION_DURATION_SEC = 2.0
 
@@ -451,23 +452,13 @@ def post_scan_return_rotation_duration(delta_deg: float) -> float:
     return max(requested, velocity_floor, acceleration_floor)
 
 
-def scan_step_rotation_duration(delta_deg: float) -> float:
-    """Run moves into scan views 2.704x faster than the transit speed."""
-    return (
-        float(_ORIGINAL_MOVEMENT_DURATION(delta_deg))
-        * SCAN_STEP_DURATION_FACTOR
+def move_to_scan_view(arm, view_joints, _commanded_deg, _delta_deg) -> None:
+    joint_trajectory.move_joints_trapezoid(
+        arm,
+        view_joints,
+        SCAN_TRAPEZOID_SPEED_DPS,
+        SCAN_TRAPEZOID_ACCEL_DPS2,
     )
-
-
-def scan_target_rotation_duration(
-    commanded_deg: float,
-    delta_deg: float,
-) -> float:
-    """Double only the move into the first -140-degree scan view."""
-    duration = scan_step_rotation_duration(delta_deg)
-    if int(round(float(commanded_deg))) == -140:
-        return duration / FIRST_SCAN_ENTRY_SPEED_MULTIPLIER
-    return duration
 
 
 def configure_selective_speed() -> None:
@@ -489,10 +480,10 @@ def configure_selective_speed() -> None:
     scan.multi.movement_duration = transit_rotation_duration
 
     # Return to centre after the sweep is another 2.08x faster; moves into
-    # each scan view use the 2.704x step speed.
+    # each scan view are servo-limit trapezoids.
     scan.scan_movement_duration = scan_rotation_duration
     scan.post_scan_return_duration = post_scan_return_rotation_duration
-    scan.scan_target_movement_duration = scan_target_rotation_duration
+    scan.move_to_scan_view = move_to_scan_view
 
     scan.park_arm = park_at_target_speed
     scan.reset_harvest_motion_state = reset_direct_hover_state

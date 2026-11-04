@@ -21,10 +21,10 @@ from std_srvs.srv import SetBool
 
 
 AUTO_REFERENCE_FRAMES = 15
-# Hard ceiling for ⑨'s turn rate (next_stop_max_angular_z); tune below it.
+# Hard ceiling for the ②/⑨ curve and ⑤ in-place turn rates; tune below it.
 NEXT_STOP_MAX_ANGULAR_Z_LIMIT = 0.60
-# Hard ceiling for ⑪/⑫ speeds (final_camera/final_straight_linear_speed);
-# ①~⑧ keep max_linear_speed.
+# Hard ceiling for ①/⑪/⑫ speeds (linear_speed, final_camera/final_straight_
+# linear_speed); the other legs keep max_linear_speed.
 FINAL_CAMERA_MAX_LINEAR_SPEED = 0.20
 # Same name/meaning as arm_control_pkg ..._v4: leave STATION on the /harvest
 # feedback status="departure_ready" (last pumpkin released and risen to bin
@@ -61,6 +61,7 @@ class DriveState:
     FINAL_CAMERA_DRIVING = 'FINAL_CAMERA_DRIVING'
     FINAL_STRAIGHT_DRIVING = 'FINAL_STRAIGHT_DRIVING'
     FINAL_REACHED = 'FINAL_REACHED'
+    STEP_WAIT = 'STEP_WAIT'
     FAULT = 'FAULT'
 
 
@@ -89,6 +90,12 @@ class CameraStraightDrive(Node):
         self.declare_parameter('curve_yaw_tolerance_deg', 3.0)
         self.declare_parameter('curve_linear_speed', 0.04)
         self.declare_parameter('curve_min_linear_speed', 0.015)
+        # ② / ⑦ (waypoint -> STATION) own speed and turn cap; the other
+        # curves keep curve_linear_speed / max_angular_speed.
+        self.declare_parameter('first_curve_linear_speed', 0.04)
+        self.declare_parameter('first_curve_max_angular_z', 0.15)
+        self.declare_parameter('station_curve_linear_speed', 0.04)
+        self.declare_parameter('station_curve_max_angular_z', 0.15)
         self.declare_parameter('curve_kp_position', 1.5)
         self.declare_parameter('curve_kp_yaw', 0.8)
         self.declare_parameter('curve_start_handle_m', 0.13)
@@ -121,10 +128,17 @@ class CameraStraightDrive(Node):
         self.declare_parameter('waypoint_forward_rotate_test_max_deg', 50.0)
         self.declare_parameter('waypoint_test_forward_distance_m', 0.10)
         self.declare_parameter('waypoint_test_forward_speed', 0.04)
+        # ④/⑤ profile: ramp up at *_accel, brake so the speed falls to *_min
+        # speed at the target (sqrt(2*accel*remaining)). 0.0 accel = constant
+        # *_speed as before. ④ also holds its start heading.
+        self.declare_parameter('waypoint_forward_accel', 0.0)
+        self.declare_parameter('waypoint_forward_min_speed', 0.02)
         self.declare_parameter('waypoint_test_forward_timeout_sec', 8.0)
         self.declare_parameter('waypoint_test_forward_max_travel_m', 0.22)
         self.declare_parameter('waypoint_test_rotate_deg', 45.0)
         self.declare_parameter('waypoint_test_rotate_speed', 0.15)
+        self.declare_parameter('waypoint_rotate_accel', 0.0)
+        self.declare_parameter('waypoint_rotate_min_speed', 0.08)
         self.declare_parameter('waypoint_test_rotate_timeout_sec', 8.0)
         self.declare_parameter('waypoint_test_rotate_max_deg', 50.0)
         self.declare_parameter('waypoint_pose_settle_sec', 0.5)
@@ -145,6 +159,10 @@ class CameraStraightDrive(Node):
         self.declare_parameter('station_timeout_sec', 25.0)
         self.declare_parameter('station_max_travel_m', 0.85)
         self.declare_parameter('manual_station_departure', True)
+        # true (pinky_drive_test): stop after every leg, ENTER starts the next.
+        self.declare_parameter('step_mode', False)
+        # step_mode only stops before legs >= this number (0 = every leg).
+        self.declare_parameter('step_from_leg', 0)
         self.declare_parameter('use_harvest_action', True)
         self.declare_parameter('harvest_target_count', 1)
         self.declare_parameter('next_stop_target_forward_m', 0.29)
@@ -167,6 +185,9 @@ class CameraStraightDrive(Node):
         self.declare_parameter('final_camera_distance_m', 0.45)
         self.declare_parameter('final_camera_linear_speed', 0.20)
         self.declare_parameter('final_camera_detect_timeout_sec', 1.0)
+        # ① lost line: hold the heading this long, then FAULT. ⑪ never faults
+        # on a lost line: it holds the heading until the line returns.
+        self.declare_parameter('camera_line_loss_hold_sec', 0.3)
         # ⑫: after ⑪, odom straight (heading held) for this distance, then stop.
         self.declare_parameter('final_straight_distance_m', 0.45)
         self.declare_parameter('final_straight_linear_speed', 0.20)
@@ -200,6 +221,12 @@ class CameraStraightDrive(Node):
         # <= 0: latch the scene brightness of the first frames after start.
         self.declare_parameter('hsv_adaptive_reference_v', 0.0)
         self.declare_parameter('hsv_adaptive_roi_y_ratio', 0.65)
+        # Second try when the HSV mask finds no line: Lab b* (yellowness) is
+        # far less sensitive to shadow/glare than V/S. a* upper bound rejects
+        # orange/red. Off by default: the node behaves exactly as before.
+        self.declare_parameter('yellow_lab_fallback_enabled', False)
+        self.declare_parameter('yellow_lab_b_low', 145)
+        self.declare_parameter('yellow_lab_a_high', 140)
 
         self._load_parameters()
         self._validate_parameters()
@@ -261,6 +288,7 @@ class CameraStraightDrive(Node):
         self.station_final_approach_best_error = None
         self.station_final_previous_forward_to_target = None
         self.station_departure_requested = threading.Event()
+        self.step_resume = None
         self.station_input_active = threading.Event()
         self.station_input_shutdown = threading.Event()
         self.harvest_goal_sent = False
@@ -285,6 +313,7 @@ class CameraStraightDrive(Node):
         self.next_stop_target_yaw = None
         self.last_linear_command = 0.0
         self.path_detected = False
+        self.line_source = None  # 'HSV' / 'LAB' while a line is fitted
         self.boundary_x = None
         self.target_x = int(round(self.target_x_config))
         self.path_error = None
@@ -356,6 +385,14 @@ class CameraStraightDrive(Node):
             self.get_parameter('curve_linear_speed').value)
         self.curve_min_linear_speed = float(
             self.get_parameter('curve_min_linear_speed').value)
+        self.first_curve_linear_speed = float(
+            self.get_parameter('first_curve_linear_speed').value)
+        self.first_curve_max_angular_z = float(
+            self.get_parameter('first_curve_max_angular_z').value)
+        self.station_curve_linear_speed = float(
+            self.get_parameter('station_curve_linear_speed').value)
+        self.station_curve_max_angular_z = float(
+            self.get_parameter('station_curve_max_angular_z').value)
         self.curve_kp_position = float(
             self.get_parameter('curve_kp_position').value)
         self.curve_kp_yaw = float(
@@ -420,6 +457,10 @@ class CameraStraightDrive(Node):
             self.get_parameter('waypoint_test_forward_distance_m').value)
         self.waypoint_test_forward_speed = float(
             self.get_parameter('waypoint_test_forward_speed').value)
+        self.waypoint_forward_accel = float(
+            self.get_parameter('waypoint_forward_accel').value)
+        self.waypoint_forward_min_speed = float(
+            self.get_parameter('waypoint_forward_min_speed').value)
         self.waypoint_test_forward_timeout = float(
             self.get_parameter('waypoint_test_forward_timeout_sec').value)
         self.waypoint_test_forward_max_travel = float(
@@ -428,6 +469,10 @@ class CameraStraightDrive(Node):
             self.get_parameter('waypoint_test_rotate_deg').value))
         self.waypoint_test_rotate_speed = float(
             self.get_parameter('waypoint_test_rotate_speed').value)
+        self.waypoint_rotate_accel = float(
+            self.get_parameter('waypoint_rotate_accel').value)
+        self.waypoint_rotate_min_speed = float(
+            self.get_parameter('waypoint_rotate_min_speed').value)
         self.waypoint_test_rotate_timeout = float(
             self.get_parameter('waypoint_test_rotate_timeout_sec').value)
         self.waypoint_test_rotate_max_angle = math.radians(float(
@@ -468,6 +513,8 @@ class CameraStraightDrive(Node):
             self.get_parameter('station_max_travel_m').value)
         self.manual_station_departure = bool(
             self.get_parameter('manual_station_departure').value)
+        self.step_mode = bool(self.get_parameter('step_mode').value)
+        self.step_from_leg = int(self.get_parameter('step_from_leg').value)
         self.use_harvest_action = bool(
             self.get_parameter('use_harvest_action').value)
         self.harvest_target_count = int(
@@ -508,6 +555,11 @@ class CameraStraightDrive(Node):
             self.get_parameter('final_camera_linear_speed').value)
         self.final_camera_detect_timeout = float(
             self.get_parameter('final_camera_detect_timeout_sec').value)
+        self.camera_line_loss_hold = float(
+            self.get_parameter('camera_line_loss_hold_sec').value)
+        self.line_lost_since = None
+        self.line_hold_yaw = 0.0
+        self.final_camera_line_seen = False
         self.final_camera_start_x = None
         self.final_camera_start_y = None
         self.final_camera_started_at = None
@@ -560,12 +612,20 @@ class CameraStraightDrive(Node):
             self.get_parameter('hsv_adaptive_reference_v').value)
         self.hsv_adaptive_roi_y_ratio = float(
             self.get_parameter('hsv_adaptive_roi_y_ratio').value)
+        self.yellow_lab_fallback_enabled = bool(
+            self.get_parameter('yellow_lab_fallback_enabled').value)
+        self.yellow_lab_b_low = int(
+            self.get_parameter('yellow_lab_b_low').value)
+        self.yellow_lab_a_high = int(
+            self.get_parameter('yellow_lab_a_high').value)
 
     def _validate_parameters(self):
         if not 0.0 < self.max_linear_speed <= 0.10:
             raise ValueError('max_linear_speed must be within (0.0, 0.10] m/s')
-        if not 0.0 < self.linear_speed <= self.max_linear_speed:
-            raise ValueError('linear_speed must not exceed max_linear_speed')
+        if not 0.0 < self.linear_speed <= FINAL_CAMERA_MAX_LINEAR_SPEED:
+            raise ValueError(
+                'linear_speed must be within '
+                f'(0.0, {FINAL_CAMERA_MAX_LINEAR_SPEED}] m/s')
         if not 0.0 < self.max_angular_speed <= 0.15:
             raise ValueError('max_angular_speed must be within (0.0, 0.15]')
         if self.kp < 0.0 or self.steering_sign not in (-1.0, 1.0):
@@ -578,6 +638,15 @@ class CameraStraightDrive(Node):
             raise ValueError('curve_linear_speed exceeds max_linear_speed')
         if not 0.0 < self.curve_min_linear_speed <= self.curve_linear_speed:
             raise ValueError('invalid curve_min_linear_speed')
+        for name in ('first_curve', 'station_curve'):
+            speed = getattr(self, f'{name}_linear_speed')
+            turn = getattr(self, f'{name}_max_angular_z')
+            if not self.curve_min_linear_speed <= speed <= self.max_linear_speed:
+                raise ValueError(f'invalid {name}_linear_speed')
+            if not 0.0 < turn <= NEXT_STOP_MAX_ANGULAR_Z_LIMIT:
+                raise ValueError(
+                    f'{name}_max_angular_z must be within '
+                    f'(0.0, {NEXT_STOP_MAX_ANGULAR_Z_LIMIT}] rad/s')
         if min(
                 self.curve_position_tolerance,
                 self.curve_yaw_tolerance,
@@ -643,8 +712,16 @@ class CameraStraightDrive(Node):
         if (self.waypoint_test_forward_distance
                 >= self.waypoint_test_forward_max_travel):
             raise ValueError('waypoint test forward target exceeds travel limit')
-        if self.waypoint_test_rotate_speed > self.max_angular_speed:
+        if self.waypoint_test_rotate_speed > NEXT_STOP_MAX_ANGULAR_Z_LIMIT:
             raise ValueError('waypoint test rotate speed exceeds safety limit')
+        if self.waypoint_forward_accel < 0.0 or self.waypoint_rotate_accel < 0.0:
+            raise ValueError('waypoint accel parameters must be nonnegative')
+        if not (0.0 < self.waypoint_forward_min_speed
+                <= self.waypoint_test_forward_speed):
+            raise ValueError('invalid waypoint_forward_min_speed')
+        if not (0.0 < self.waypoint_rotate_min_speed
+                <= self.waypoint_test_rotate_speed):
+            raise ValueError('invalid waypoint_rotate_min_speed')
         if self.waypoint_test_rotate_angle >= self.waypoint_test_rotate_max_angle:
             raise ValueError('waypoint test rotate target exceeds angle limit')
         if (self.waypoint_forward_rotate_test_distance
@@ -696,6 +773,8 @@ class CameraStraightDrive(Node):
                 f'(0.0, {FINAL_CAMERA_MAX_LINEAR_SPEED}] m/s')
         if self.final_camera_detect_timeout <= 0.0:
             raise ValueError('final_camera_detect_timeout_sec must be positive')
+        if self.camera_line_loss_hold < 0.0:
+            raise ValueError('camera_line_loss_hold_sec must be nonnegative')
         if self.next_stop_wait_sec < 0.0:
             raise ValueError('next_stop_wait_sec must be nonnegative')
         if (self.next_stop2_target_forward < 0.0
@@ -738,6 +817,12 @@ class CameraStraightDrive(Node):
         ]
         if not all(0 <= value <= 255 for value in hsv_values):
             raise ValueError('HSV parameters must be within [0, 255]')
+        # 128 = neutral in OpenCV 8-bit Lab; b_low at/below it would accept
+        # grey floor, a_high below it would reject the yellow itself.
+        if not 128 < self.yellow_lab_b_low <= 255:
+            raise ValueError('yellow_lab_b_low must be in (128, 255]')
+        if not 128 <= self.yellow_lab_a_high <= 255:
+            raise ValueError('yellow_lab_a_high must be in [128, 255]')
         if self.hsv_adaptive_enabled:
             if not 0.0 < self.hsv_adaptive_ema_alpha <= 1.0:
                 raise ValueError('hsv_adaptive_ema_alpha must be in (0, 1]')
@@ -784,60 +869,19 @@ class CameraStraightDrive(Node):
         ], dtype=np.uint8)
         if self.hsv_adaptive_enabled:
             lower, upper = self._adapt_yellow_sv(frame, lower, upper)
-        mask = cv2.inRange(hsv, lower, upper)
-        kernel = np.ones((5, 5), dtype=np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-        contours, _ = cv2.findContours(
-            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        min_height = roi.shape[0] * self.min_boundary_height_ratio
-        candidates = []
-        for contour in contours:
-            x, y, box_width, box_height = cv2.boundingRect(contour)
-            area = cv2.contourArea(contour)
-            if area >= self.min_boundary_area and box_height >= min_height:
-                # Height is weighted strongly so a long boundary is preferred
-                # over a compact yellow object with a similar area.
-                score = box_height * 10.0 + area / max(box_width, 1)
-                candidates.append((score, contour))
-        if not candidates:
+        source = 'HSV'
+        boundary_x = self._fit_boundary(
+            cv2.inRange(hsv, lower, upper), top, left, height)
+        if boundary_x is None and self.yellow_lab_fallback_enabled:
+            source = 'LAB'
+            boundary_x = self._fit_boundary(
+                self._lab_yellow_mask(roi), top, left, height)
+        if boundary_x is None:
             self._clear_detection()
-            if self.state in CAMERA_STATES:
-                self._enter_fault('yellow boundary detection lost')
             return
-
-        contour = max(candidates, key=lambda item: item[0])[1]
-        contour_mask = np.zeros_like(mask)
-        cv2.drawContours(contour_mask, [contour], -1, 255, thickness=-1)
-
-        # Use the road-facing (rightmost) yellow edge from every image row.
-        # This gives many points for x=f(y), rather than one contour center.
-        edge_y = []
-        edge_x = []
-        for local_y in range(contour_mask.shape[0]):
-            columns = np.flatnonzero(contour_mask[local_y])
-            if columns.size:
-                edge_y.append(float(top + local_y))
-                edge_x.append(float(left + columns.max()))
-        if len(edge_x) < self.min_line_points:
-            self._clear_detection()
-            if self.state in CAMERA_STATES:
-                self._enter_fault('not enough yellow edge points for line fit')
-            return
-
-        edge_y = np.asarray(edge_y)
-        edge_x = np.asarray(edge_x)
-        slope, intercept = np.polyfit(edge_y, edge_x, 1)
-        residual = np.abs(edge_x - (slope * edge_y + intercept))
-        inliers = residual <= self.line_fit_max_residual
-        if int(np.count_nonzero(inliers)) < self.min_line_points:
-            self._clear_detection()
-            if self.state in CAMERA_STATES:
-                self._enter_fault('yellow boundary line fit rejected')
-            return
-        slope, intercept = np.polyfit(edge_y[inliers], edge_x[inliers], 1)
-        evaluation_y = height * self.boundary_eval_y_ratio
-        boundary_x = slope * evaluation_y + intercept
+        if source != self.line_source:
+            self.get_logger().warning(f'yellow line source: {source}')
+        self.line_source = source
 
         # In the centered calibration image, boundary_reference_x corresponds
         # to a desired path at target_x. Boundary movement shifts that
@@ -857,6 +901,59 @@ class CameraStraightDrive(Node):
         self.target_x = int(round(self.target_x_config))
         self.path_error = int(round(error))
         self._set_camera_steering(angular)
+
+    def _lab_yellow_mask(self, roi):
+        """Yellowness mask: b* high (yellow), a* not high (not orange/red)."""
+        lab = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB)
+        b_ok = lab[:, :, 2] >= self.yellow_lab_b_low
+        a_ok = lab[:, :, 1] <= self.yellow_lab_a_high
+        return (b_ok & a_ok).astype(np.uint8) * 255
+
+    def _fit_boundary(self, mask, top, left, height):
+        """Return the fitted boundary x at boundary_eval_y_ratio, or None."""
+        kernel = np.ones((5, 5), dtype=np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        contours, _ = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        min_height = mask.shape[0] * self.min_boundary_height_ratio
+        candidates = []
+        for contour in contours:
+            x, y, box_width, box_height = cv2.boundingRect(contour)
+            area = cv2.contourArea(contour)
+            if area >= self.min_boundary_area and box_height >= min_height:
+                # Height is weighted strongly so a long boundary is preferred
+                # over a compact yellow object with a similar area.
+                score = box_height * 10.0 + area / max(box_width, 1)
+                candidates.append((score, contour))
+        if not candidates:
+            return None
+
+        contour = max(candidates, key=lambda item: item[0])[1]
+        contour_mask = np.zeros_like(mask)
+        cv2.drawContours(contour_mask, [contour], -1, 255, thickness=-1)
+
+        # Use the road-facing (rightmost) yellow edge from every image row.
+        # This gives many points for x=f(y), rather than one contour center.
+        edge_y = []
+        edge_x = []
+        for local_y in range(contour_mask.shape[0]):
+            columns = np.flatnonzero(contour_mask[local_y])
+            if columns.size:
+                edge_y.append(float(top + local_y))
+                edge_x.append(float(left + columns.max()))
+        if len(edge_x) < self.min_line_points:
+            return None
+
+        edge_y = np.asarray(edge_y)
+        edge_x = np.asarray(edge_x)
+        slope, intercept = np.polyfit(edge_y, edge_x, 1)
+        residual = np.abs(edge_x - (slope * edge_y + intercept))
+        inliers = residual <= self.line_fit_max_residual
+        if int(np.count_nonzero(inliers)) < self.min_line_points:
+            return None
+        slope, intercept = np.polyfit(edge_y[inliers], edge_x[inliers], 1)
+        return slope * height * self.boundary_eval_y_ratio + intercept
 
     def _in_second_next_stop(self):
         return (self.state == DriveState.STATION_TO_NEXT_STOP
@@ -972,7 +1069,7 @@ class CameraStraightDrive(Node):
                 self.current_y - self.final_camera_start_y,
             )
             if self.final_camera_distance >= self.final_camera_distance_target:
-                self._start_final_straight(self.get_clock().now())
+                self._step_gate(12, '⑫ 마지막 직진', self._start_final_straight)
             return
         if self.state == DriveState.FINAL_STRAIGHT_DRIVING:
             self.final_straight_distance = math.hypot(
@@ -998,7 +1095,7 @@ class CameraStraightDrive(Node):
             self.get_logger().warning(
                 f'TARGET 0.81M REACHED: {self.odom_distance:.3f} m; '
                 'starting smooth curve')
-            self._start_curve()
+            self._step_gate(2, '② 첫 지점 곡선', lambda now: self._start_curve())
 
     def _control_tick(self):
         sequence_state = self.state in (
@@ -1019,6 +1116,7 @@ class CameraStraightDrive(Node):
             DriveState.NEXT_STOP_WAIT,
             DriveState.FINAL_CAMERA_DRIVING,
             DriveState.FINAL_STRAIGHT_DRIVING,
+            DriveState.STEP_WAIT,
         )
         if not self.enabled and not (self.sequence_active and sequence_state):
             return
@@ -1034,6 +1132,8 @@ class CameraStraightDrive(Node):
             self._start_station_wait()
         elif self.state == DriveState.STATION_WAIT:
             self._control_station_wait(now)
+        elif self.state == DriveState.STEP_WAIT:
+            self._control_step_wait(now)
         elif self.state == DriveState.TEST_FORWARD_MOVE:
             self._control_test_forward(now)
         elif self.state == DriveState.WAYPOINT_TEST_FORWARD:
@@ -1062,19 +1162,40 @@ class CameraStraightDrive(Node):
             self._control_final_straight(now)
 
     def _control_camera_drive(self, now):
-        if self._is_stale(now, self.last_frame_time, self.frame_timeout):
-            self._enter_fault('camera frame timeout')
-            return
-        if not self.path_detected:
-            self._enter_fault('yellow boundary unavailable')
-            return
+        stale = self._is_stale(now, self.last_frame_time, self.frame_timeout)
+        angular = self.steering_command
+        if stale or not self.path_detected:
+            # Line lost (or no frames): hold the heading from the moment it
+            # was lost. ① gives up after camera_line_loss_hold_sec; ⑪ keeps
+            # going (⑫ after it is odom-only anyway).
+            reason = 'camera frame timeout' if stale else 'yellow boundary unavailable'
+            if self.line_lost_since is None:
+                self.line_lost_since = now
+                self.line_hold_yaw = self.current_yaw
+                self.get_logger().warning(
+                    f'{self.state}: {reason}; holding heading')
+            lost = (now - self.line_lost_since).nanoseconds / 1e9
+            if (self.state == DriveState.CAMERA_DRIVING
+                    and lost > self.camera_line_loss_hold):
+                self._enter_fault(f'{reason} for {lost:.2f}s')
+                return
+            yaw_error = self._normalize_angle(
+                self.line_hold_yaw - self.current_yaw)
+            angular = max(-self.max_angular_speed,
+                          min(self.max_angular_speed,
+                              self.curve_kp_yaw * yaw_error))
+        elif self.line_lost_since is not None:
+            lost = (now - self.line_lost_since).nanoseconds / 1e9
+            self.get_logger().warning(
+                f'{self.state}: line back after {lost:.2f}s')
+            self.line_lost_since = None
 
         command = Twist()
         if self.state == DriveState.FINAL_CAMERA_DRIVING:
             command.linear.x = self.final_camera_linear_speed
         else:
-            command.linear.x = min(self.linear_speed, self.max_linear_speed)
-        command.angular.z = self.steering_command
+            command.linear.x = self.linear_speed
+        command.angular.z = angular
         self.cmd_pub.publish(command)
         self.last_linear_command = command.linear.x
         if not self.command_active:
@@ -1249,12 +1370,7 @@ class CameraStraightDrive(Node):
             if waypoint_move:
                 self._finish_station_waypoint(now)
                 return
-            self.command_active = False
-            self.last_linear_command = 0.0
-            self.steering_command = 0.0
-            self._publish_stop(repeat=5)
-            self.enabled = False
-            self._prepare_station_target(now)
+            self._finish_first_curve(now)
             return
 
         current = np.array([self.current_x, self.current_y])
@@ -1268,13 +1384,21 @@ class CameraStraightDrive(Node):
             - self.curve_arc_lengths[self.curve_progress_index],
         )
         flows_into_camera = self._in_second_next_stop()
+        terminal_dx = self.current_x - self.curve_target_x
+        terminal_dy = self.current_y - self.curve_target_y
+        distance_past_target = (
+            math.cos(self.curve_target_yaw) * terminal_dx
+            + math.sin(self.curve_target_yaw) * terminal_dy
+        )
+        first_curve = self.state == DriveState.CURVE_TO_FIRST_POINT
+        if first_curve and (
+                distance_past_target > 0.0
+                or self.curve_progress_index >= len(self.curve_points) - 1):
+            # ② must never drive on past its target (a near miss of the 2 cm
+            # tolerance used to run on to the travel limit).
+            self._finish_first_curve(now, path_complete=True)
+            return
         if station_move or waypoint_move:
-            terminal_dx = self.current_x - self.curve_target_x
-            terminal_dy = self.current_y - self.curve_target_y
-            distance_past_target = (
-                math.cos(self.curve_target_yaw) * terminal_dx
-                + math.sin(self.curve_target_yaw) * terminal_dy
-            )
             if distance_past_target > self.station_overshoot_tolerance:
                 if flows_into_camera:
                     self._finish_next_stop(path_complete=True)
@@ -1313,11 +1437,18 @@ class CameraStraightDrive(Node):
         heading_error = self._normalize_angle(
             reference_yaw - self.current_yaw)
         next_stop = self.state == DriveState.STATION_TO_NEXT_STOP
-        target_linear_speed = (
-            self.next_stop_linear_speed
-            if next_stop
-            else self.curve_linear_speed
-        )
+        if next_stop:
+            target_linear_speed = self.next_stop_linear_speed
+            turn_limit = self.next_stop_max_angular_z
+        elif first_curve:
+            target_linear_speed = self.first_curve_linear_speed
+            turn_limit = self.first_curve_max_angular_z
+        elif self.state == DriveState.STATION_MOVE_FROM_WAYPOINT:
+            target_linear_speed = self.station_curve_linear_speed
+            turn_limit = self.station_curve_max_angular_z
+        else:
+            target_linear_speed = self.curve_linear_speed
+            turn_limit = self.max_angular_speed
         goal_slowdown_gain = (
             self.next_stop_goal_slowdown_gain if next_stop else 0.8)
         speed_from_goal = max(
@@ -1335,12 +1466,7 @@ class CameraStraightDrive(Node):
             speed_from_goal = min(
                 speed_from_goal, speed_from_remaining_path)
         if abs(curvature) > 1e-6:
-            curvature_angular_limit = (
-                self.next_stop_max_angular_z
-                if self.state == DriveState.STATION_TO_NEXT_STOP
-                else self.max_angular_speed
-            )
-            speed_from_curvature = curvature_angular_limit / abs(curvature)
+            speed_from_curvature = turn_limit / abs(curvature)
             linear = max(
                 self.curve_min_linear_speed,
                 min(speed_from_goal, speed_from_curvature),
@@ -1352,12 +1478,7 @@ class CameraStraightDrive(Node):
             - self.curve_kp_position * cross_track_error
             + self.curve_kp_yaw * heading_error
         )
-        angular_limit = (
-            self.next_stop_max_angular_z
-            if next_stop
-            else self.max_angular_speed
-        )
-        angular = max(-angular_limit, min(angular_limit, angular))
+        angular = max(-turn_limit, min(turn_limit, angular))
         if next_stop:
             max_angular_step = (
                 self.next_stop_max_angular_accel / self.control_rate)
@@ -1372,6 +1493,19 @@ class CameraStraightDrive(Node):
         self.last_linear_command = command.linear.x
         self.steering_command = command.angular.z
         self.command_active = True
+
+    def _finish_first_curve(self, now, path_complete=False):
+        self.command_active = False
+        self.last_linear_command = 0.0
+        self.steering_command = 0.0
+        self._publish_stop(repeat=5)
+        self.enabled = False
+        if path_complete:
+            self.get_logger().warning(
+                '② path complete outside tolerance: '
+                f'position_error={self.curve_position_error:.3f}m, '
+                f'yaw_error={math.degrees(self.curve_yaw_error):.1f}deg')
+        self._prepare_station_target(now)
 
     def _station_pose_reached(self):
         return (
@@ -1580,8 +1714,7 @@ class CameraStraightDrive(Node):
                     continue
                 self.station_departure_requested.set()
                 self.station_input_active.clear()
-                self.get_logger().warning(
-                    'ENTER detected: preparing STATION departure')
+                self.get_logger().warning('ENTER detected: starting next leg')
         finally:
             if owns_stream and input_stream is not None:
                 input_stream.close()
@@ -1716,7 +1849,7 @@ class CameraStraightDrive(Node):
                 f'waiting {self.next_stop_wait_sec:.1f}s')
             return
         self.get_logger().warning(f'⑩ reached: {result}')
-        self._start_final_camera_drive(self.get_clock().now())
+        self._step_gate(11, '⑪ 노란선 직진', self._start_final_camera_drive)
 
     def _start_final_camera_drive(self, now):
         # The line was fitted during ⑩: keep driving with its steering. Without
@@ -1726,6 +1859,8 @@ class CameraStraightDrive(Node):
         self.final_camera_start_y = self.current_y
         self.final_camera_started_at = now
         self.final_camera_distance = 0.0
+        self.final_camera_line_seen = line_ready
+        self.line_lost_since = None
         self.state = DriveState.FINAL_CAMERA_DRIVING
         if line_ready:
             self.steering_command = getattr(
@@ -1743,7 +1878,9 @@ class CameraStraightDrive(Node):
                else 'waiting for line fit'))
 
     def _control_final_camera_drive(self, now):
-        if not self.path_detected:
+        if self.path_detected:
+            self.final_camera_line_seen = True
+        elif not self.final_camera_line_seen:
             elapsed = (now - self.final_camera_started_at).nanoseconds / 1e9
             if elapsed < self.final_camera_detect_timeout:
                 self._publish_stop()
@@ -1802,7 +1939,7 @@ class CameraStraightDrive(Node):
         elapsed = (now - self.next_stop_wait_started_at).nanoseconds / 1e9
         if elapsed >= self.next_stop_wait_sec:
             self.next_stop_leg = 2
-            self._start_next_stop_leg(now)
+            self._step_gate(10, '⑩ 두 번째 곡선', self._start_next_stop_leg)
 
     def _start_station_final_approach(self, now):
         self.command_active = False
@@ -1995,6 +2132,39 @@ class CameraStraightDrive(Node):
             'FIRST_POINT_REACHED: target pose tolerance satisfied; '
             f'STOPPING for {self.station_stop_duration:.1f}s')
 
+    def _profiled_speed(self, remaining, previous, top, minimum, accel):
+        """④/⑤ trapezoid; accel 0.0 = constant top speed (legacy)."""
+        if accel <= 0.0:
+            return top
+        brake = math.sqrt(2.0 * accel * max(remaining, 0.0))
+        ramp = previous + accel / self.control_rate
+        return max(minimum, min(top, brake, ramp))
+
+    def _step_gate(self, leg, label, resume):
+        """step_mode: stop before leg, run resume(now) after ENTER; else at once."""
+        if not self.step_mode or leg < self.step_from_leg:
+            resume(self.get_clock().now())
+            return
+        self.command_active = False
+        self.last_linear_command = 0.0
+        self.steering_command = 0.0
+        self._publish_stop(repeat=5)
+        self.step_resume = resume
+        self.state = DriveState.STEP_WAIT
+        self.station_departure_requested.clear()
+        self.station_input_active.set()
+        prompt = f'[STEP] 정지. ENTER = 다음 단계: {label}'
+        self.get_logger().warning(prompt)
+        print(prompt, flush=True)
+
+    def _control_step_wait(self, now):
+        self._publish_stop()
+        if not self.station_departure_requested.is_set():
+            return
+        self.station_departure_requested.clear()
+        resume, self.step_resume = self.step_resume, None
+        resume(now)
+
     def _start_station_wait(self):
         self.state = DriveState.STATION_WAIT
         self._publish_stop()
@@ -2010,7 +2180,9 @@ class CameraStraightDrive(Node):
         elapsed = (now - self.station_wait_started_at).nanoseconds / 1e9
         if elapsed < self.station_stop_duration:
             return
+        self._step_gate(4, '④ 직진', self._start_after_station_wait)
 
+    def _start_after_station_wait(self, now):
         if self.test_forward_mode:
             self._start_test_forward(now)
         elif self.waypoint_forward_rotate_test_mode:
@@ -2082,6 +2254,7 @@ class CameraStraightDrive(Node):
                 self.waypoint_test_rotate_max_angle)
         self.waypoint_test_start_x = self.current_x
         self.waypoint_test_start_y = self.current_y
+        self.waypoint_forward_start_yaw = self.current_yaw
         self.waypoint_test_distance = 0.0
         self.waypoint_test_started_at = now
         self.last_linear_command = 0.0
@@ -2099,11 +2272,19 @@ class CameraStraightDrive(Node):
             self._enter_fault('waypoint test forward timeout')
             return
         command = Twist()
-        command.linear.x = self.waypoint_test_forward_speed
-        command.angular.z = 0.0
+        command.linear.x = self._profiled_speed(
+            self.waypoint_motion_forward_distance - self.waypoint_test_distance,
+            self.last_linear_command, self.waypoint_test_forward_speed,
+            self.waypoint_forward_min_speed, self.waypoint_forward_accel)
+        if self.waypoint_forward_accel > 0.0:  # hold the start heading
+            yaw_error = self._normalize_angle(
+                self.waypoint_forward_start_yaw - self.current_yaw)
+            command.angular.z = max(
+                -self.max_angular_speed,
+                min(self.max_angular_speed, self.curve_kp_yaw * yaw_error))
         self.cmd_pub.publish(command)
         self.last_linear_command = command.linear.x
-        self.steering_command = 0.0
+        self.steering_command = command.angular.z
         self.command_active = True
 
     def _finish_waypoint_test_forward(self):
@@ -2119,9 +2300,12 @@ class CameraStraightDrive(Node):
                 'TEST_FORWARD_REACHED: '
                 f'distance={self.waypoint_test_distance:.3f}m; STOPPING')
             return
+        self._step_gate(5, '⑤ 제자리 회전', self._start_waypoint_test_rotate)
+
+    def _start_waypoint_test_rotate(self, now):
         self.waypoint_test_start_yaw = self.current_yaw
         self.waypoint_test_yaw_change = 0.0
-        self.waypoint_test_started_at = self.get_clock().now()
+        self.waypoint_test_started_at = now
         self.state = DriveState.WAYPOINT_TEST_ROTATE
         self.get_logger().warning(
             'WAYPOINT_TEST_FORWARD complete; STOPPED, starting odom yaw turn')
@@ -2133,7 +2317,10 @@ class CameraStraightDrive(Node):
             return
         command = Twist()
         command.linear.x = 0.0
-        command.angular.z = -self.waypoint_test_rotate_speed
+        command.angular.z = -self._profiled_speed(
+            self.waypoint_motion_rotate_angle + self.waypoint_test_yaw_change,
+            abs(self.steering_command), self.waypoint_test_rotate_speed,
+            self.waypoint_rotate_min_speed, self.waypoint_rotate_accel)
         self.cmd_pub.publish(command)
         self.last_linear_command = 0.0
         self.steering_command = command.angular.z
@@ -2194,11 +2381,19 @@ class CameraStraightDrive(Node):
         self.waypoint_start_y = self.current_y
         self.waypoint_start_yaw = self.current_yaw
         self.state = DriveState.WAYPOINT_REACHED
+        forward = math.hypot(self.current_x - self.waypoint_test_start_x,
+                             self.current_y - self.waypoint_test_start_y)
+        turned = -self._normalize_angle(
+            self.current_yaw - self.waypoint_test_start_yaw)
         self.get_logger().warning(
             'WAYPOINT_REACHED: saved settled actual odom pose; '
-            'starting waypoint-relative STATION path')
+            'starting waypoint-relative STATION path; settled '
+            f'④={forward:.3f}m (target '
+            f'{self.waypoint_motion_forward_distance:.3f}), '
+            f'⑤={math.degrees(turned):.1f}deg (target '
+            f'{math.degrees(self.waypoint_motion_rotate_angle):.1f})')
         self._prepare_station_from_waypoint()
-        self._start_station_from_waypoint(now)
+        self._step_gate(7, '⑦ STATION 곡선', self._start_station_from_waypoint)
 
     def _prepare_station_from_waypoint(self):
         cosine = math.cos(self.waypoint_start_yaw)
@@ -2374,6 +2569,7 @@ class CameraStraightDrive(Node):
         self.enabled = True
         self.sequence_active = True
         self.command_active = False
+        self.line_lost_since = None
         self.state = DriveState.CAMERA_DRIVING
         response.success = True
         response.message = (

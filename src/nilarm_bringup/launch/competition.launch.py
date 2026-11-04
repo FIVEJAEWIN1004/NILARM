@@ -52,6 +52,9 @@ def generate_launch_description():
             # false (pinky_drive_test): no /harvest; ENTER departs STATION.
             'use_harvest_action': ParameterValue(
                 LaunchConfiguration('use_harvest_action'), value_type=bool),
+            # true (pinky_drive_test): stop after every leg, ENTER = next leg.
+            'step_mode': ParameterValue(
+                LaunchConfiguration('step_mode'), value_type=bool),
         }])
 
     # Losing motors, camera or the driver must not leave a half-running robot.
@@ -65,4 +68,5 @@ def generate_launch_description():
 
     return LaunchDescription(
         [DeclareLaunchArgument('use_harvest_action', default_value='true'),
+         DeclareLaunchArgument('step_mode', default_value='false'),
          bringup, camera, status_display, drive] + stop_on_exit)

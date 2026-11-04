@@ -11,22 +11,6 @@ from arm_control_pkg.pumpkin_harvest import (
 )
 
 
-def test_first_minus_140_scan_entry_is_twice_current_scan_speed():
-    current = speed.scan_step_rotation_duration(-140.0)
-    accelerated = speed.scan_target_rotation_duration(-140.0, -140.0)
-
-    assert accelerated == pytest.approx(current / 2.0)
-
-
-def test_other_scan_targets_keep_current_scan_speed():
-    assert speed.scan_target_rotation_duration(-110.0, 30.0) == pytest.approx(
-        speed.scan_step_rotation_duration(30.0)
-    )
-    assert speed.scan_target_rotation_duration(130.0, 30.0) == pytest.approx(
-        speed.scan_step_rotation_duration(30.0)
-    )
-
-
 def deg_joints(*values):
     return np.radians(np.asarray(values, dtype=float))
 

@@ -4,7 +4,8 @@ camera_straight_drive:
     cmd_vel_topic: /cmd_vel
     odom_topic: /odom
 
-    linear_speed: 0.10
+    # ① line follow (old 0.10); code ceiling 0.20.
+    linear_speed: 0.20
     max_linear_speed: 0.10
     max_angular_speed: 0.15
     kp: 0.002
@@ -17,6 +18,14 @@ camera_straight_drive:
     curve_position_tolerance_m: 0.02
     curve_yaw_tolerance_deg: 3.0
     curve_linear_speed: 0.04
+    # ② first-point curve only (old 0.04 / 0.15). Needs ~0.6 rad/s at the
+    # sharpest point at 0.10, so the turn cap (not the speed) limits there.
+    first_curve_linear_speed: 0.10
+    first_curve_max_angular_z: 0.50
+    # ⑦ waypoint -> STATION curve only (old 0.04 / 0.15). It ends at the path
+    # end (~27.5/19.2 cm, not 31/18); sim: that stop point moves < 3 mm.
+    station_curve_linear_speed: 0.10
+    station_curve_max_angular_z: 0.50
     curve_min_linear_speed: 0.015
     curve_kp_position: 1.5
     curve_kp_yaw: 0.8
@@ -49,11 +58,19 @@ camera_straight_drive:
     waypoint_forward_rotate_test_angle_deg: 45.0
     waypoint_forward_rotate_test_max_deg: 50.0
     waypoint_test_forward_distance_m: 0.10
-    waypoint_test_forward_speed: 0.04
+    # ④ 0.10 m straight (old: constant 0.04): ramp up 0.3 m/s^2 to 0.10, brake
+    # to 0.02 at the target, heading held. Sim: same stop error as before.
+    waypoint_test_forward_speed: 0.10
+    waypoint_forward_accel: 0.3
+    waypoint_forward_min_speed: 0.02
     waypoint_test_forward_timeout_sec: 8.0
     waypoint_test_forward_max_travel_m: 0.22
     waypoint_test_rotate_deg: 45.0
-    waypoint_test_rotate_speed: 0.15
+    # ⑤ 45 deg turn (old: constant 0.15): ramp 1.0 rad/s^2 to 0.60, brake to
+    # 0.08 at the target. Code ceiling 0.60.
+    waypoint_test_rotate_speed: 0.60
+    waypoint_rotate_accel: 1.0
+    waypoint_rotate_min_speed: 0.08
     waypoint_test_rotate_timeout_sec: 8.0
     waypoint_test_rotate_max_deg: 50.0
     waypoint_pose_settle_sec: 0.5
@@ -74,9 +91,12 @@ camera_straight_drive:
     station_timeout_sec: 25.0
     station_max_travel_m: 0.85
     manual_station_departure: true
+    # pinky_drive_test (step_mode): run ①~⑦ without stopping (STATION always
+    # waits for ENTER), then stop before ⑩, ⑪, ⑫. 0 = stop before every leg.
+    step_from_leg: 10
     use_harvest_action: true
     harvest_target_count: 1
-    next_stop_target_forward_m: 0.29
+    next_stop_target_forward_m: 0.30
     next_stop_target_right_m: 0.29
     next_stop_target_yaw_deg: -90.0
     next_stop_linear_speed: 0.10
@@ -99,7 +119,14 @@ camera_straight_drive:
     # final_camera_distance_m, then ⑫. Code ceiling 0.20 m/s.
     final_camera_distance_m: 0.45
     final_camera_linear_speed: 0.20
-    final_camera_detect_timeout_sec: 1.0
+    # ⑪ start without a line: stay stopped and wait this long for a fit
+    # (blur after ⑩ / adaptive HSV settling), then drive on holding heading.
+    final_camera_detect_timeout_sec: 2.0
+    # Lost line while driving: hold the heading at the moment it was lost and
+    # return to line following as soon as it is back. ① FAULTs after this many
+    # seconds without the line; ⑪ never FAULTs on it (⑫ is odom-only anyway).
+    # (old 0.3) 1.0 s at ① 0.20 m/s = up to 20 cm on odom heading only.
+    camera_line_loss_hold_sec: 1.0
     # ⑫ after ⑪: odom straight holding ⑫'s start heading, same speed as ⑪,
     # then FINAL_REACHED. Timeout = FAULT (e.g. wheels blocked).
     final_straight_distance_m: 0.45
@@ -114,12 +141,19 @@ camera_straight_drive:
     roi_left_ratio: 0.0
     roi_right_ratio: 0.70
 
-    yellow_h_low: 21
-    yellow_h_high: 30
-    yellow_s_low: 123
-    yellow_s_high: 185
-    yellow_v_low: 148
-    yellow_v_high: 216
+    yellow_h_low: 22
+    yellow_h_high: 32
+    yellow_s_low: 111
+    yellow_s_high: 191
+    yellow_v_low: 130
+    yellow_v_high: 200
+    # HSV found no line in a frame -> retry the same fit on a Lab mask:
+    # b* >= b_low (yellowness, little shadow/glare effect), a* <= a_high (not
+    # orange/red). Log shows "yellow line source: LAB" when it takes over.
+    # Grey floor b* ~135, shadowed yellow ~150. false = HSV only (legacy).
+    yellow_lab_fallback_enabled: true
+    yellow_lab_b_low: 145
+    yellow_lab_a_high: 140
     # Runtime-only S/V widening around the yellow_* calibration (H never
     # changes, YAML is never rewritten). false = exact legacy thresholds.
     hsv_adaptive_enabled: true

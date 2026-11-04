@@ -44,6 +44,14 @@ scan_target_movement_duration = (
 )
 
 
+def move_to_scan_view(arm, view_joints, commanded_deg, delta_deg) -> None:
+    """Default quintic move into a scan view; v4 installs a faster one."""
+    arm.move_joints(
+        view_joints,
+        duration=scan_target_movement_duration(commanded_deg, delta_deg),
+    )
+
+
 def reset_harvest_motion_state() -> None:
     """Reset optional motion state installed by a competition wrapper."""
 
@@ -691,10 +699,7 @@ def main(
             delta = commanded - current_scan_offset
             print(f"\n[자동 스캔] offset {commanded:+d}도로 이동")
             safe_to_park = False
-            arm.move_joints(
-                view_joints,
-                duration=scan_target_movement_duration(commanded, delta),
-            )
+            move_to_scan_view(arm, view_joints, commanded, delta)
             current_scan_offset = float(commanded)
             wait_for_scan_settle(
                 arm,

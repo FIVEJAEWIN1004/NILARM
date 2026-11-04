@@ -111,6 +111,46 @@ def sample_path(targets, durations, segments, hz):
         yield np.asarray(target, dtype=float)
 
 
+def trapezoid_path(q0, q1, speed_dps, accel_dps2, hz):
+    """Rest-to-rest trapezoid on the largest joint change (a triangle when it
+    is too short to reach speed_dps); the other joints follow in proportion.
+    A quintic peaks at 1.875x its average speed, so at the same servo speed
+    limit this is ~1.7x faster on long moves.  The last point is q1 exactly.
+    """
+    q0, q1 = np.asarray(q0, dtype=float), np.asarray(q1, dtype=float)
+    distance = float(np.max(np.abs(np.degrees(q1 - q0))))
+    if distance <= 0.0:
+        yield q1
+        return
+    speed = min(float(speed_dps), math.sqrt(distance * float(accel_dps2)))
+    ramp = speed / float(accel_dps2)
+    total = distance / speed + ramp
+    steps = max(1, math.ceil(total * hz - 1e-9))
+    for k in range(1, steps + 1):
+        t = min(k / hz, total)
+        if t < ramp:
+            s = 0.5 * accel_dps2 * t * t
+        elif t > total - ramp:
+            s = distance - 0.5 * accel_dps2 * (total - t) ** 2
+        else:
+            s = speed * (t - 0.5 * ramp)
+        yield q0 + (q1 - q0) * (s / distance)
+
+
+def move_joints_trapezoid(arm, target, speed_dps, accel_dps2) -> int:
+    """One rest-to-rest trapezoid move within the servo profile limits."""
+    if not (0.0 < speed_dps <= MAX_JOINT_SPEED_DPS
+            and 0.0 < accel_dps2 <= MAX_JOINT_ACCEL_DPS2):
+        raise ValueError("사다리꼴 속도·가속도가 서보 한계를 넘습니다.")
+    current = np.asarray(arm.joints(), dtype=float)
+    target = arm.check_limits(target, current)
+    return stream(
+        trapezoid_path(current, target, speed_dps, accel_dps2, arm.hz),
+        arm._write,
+        arm.hz,
+    )
+
+
 def move_joints_continuous(arm, segments, via_speed_caps_dps) -> int:
     """Stream [(target_rad, duration_s), ...] through every target, ending at rest.
 

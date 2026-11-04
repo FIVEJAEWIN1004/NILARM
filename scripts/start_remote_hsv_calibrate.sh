@@ -16,6 +16,8 @@
 repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 if [[ -z "${NILARM_LAPTOP_HOST}" && -f "${repo}/.nilarm_remote_env" ]]; then
     source "${repo}/.nilarm_remote_env"
+    # Any Wi-Fi: reach back the laptop this SSH session came from.
+    [[ -n "${SSH_CLIENT}" ]] && NILARM_LAPTOP_HOST="${SSH_CLIENT%% *}"
 fi
 if [[ -z "${NILARM_LAPTOP_HOST}" || -z "${NILARM_LAPTOP_USER}" ]]; then
     echo "HSV calibration NOT started: laptop not configured" \
@@ -26,7 +28,7 @@ target="${NILARM_LAPTOP_USER}@${NILARM_LAPTOP_HOST}"
 
 key="${NILARM_SSH_KEY:-$HOME/.ssh/nilarm_laptop_ed25519}"
 ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes
-          -o ConnectTimeout="${NILARM_SSH_TIMEOUT:-5}"
+          -o HostKeyAlias=nilarm-laptop -o ConnectTimeout="${NILARM_SSH_TIMEOUT:-5}"
           -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardX11=no)
 [[ -f "${key}" ]] && ssh_opts+=(-i "${key}" -o IdentitiesOnly=yes)
 # A tty lets Ctrl+C here cancel the laptop calibrator and lets the laptop ask
