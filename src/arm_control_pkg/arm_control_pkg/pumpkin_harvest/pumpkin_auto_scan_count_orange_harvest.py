@@ -113,6 +113,25 @@ INITIAL_CAMERA_MOVE_DURATION_SEC = 1.7
 INITIAL_CAMERA_SETTLE_TIME_SEC = 0.5
 
 
+class PhaseTimer:
+    """Print '[시간] label X.XX초' per phase and the running scan total.
+
+    reset() drops time spent waiting for a person (START_AUTO input).
+    """
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self) -> None:
+        self.start = self.last = time.monotonic()
+
+    def lap(self, label: str) -> None:
+        now = time.monotonic()
+        print(f"[시간] {label}: {now - self.last:.2f}초 "
+              f"(누적 {now - self.start:.2f}초)")
+        self.last = now
+
+
 class ScanCancelled(Exception):
     """Raised when Q is pressed during the automatic scan."""
 
@@ -657,6 +676,7 @@ def main(
                 "수확 서버를 재시작하세요.")
         raise_if_cancelled(cancel_callback)
         emit_feedback(feedback_callback, successes, "searching")
+        timer = PhaseTimer()
         calibration = base.load_calibrations()
         angle_residuals = multi.load_angle_residuals()
         missing = [angle for angle in SCAN_OFFSETS_DEG if angle not in angle_residuals]
@@ -669,23 +689,29 @@ def main(
         print(f"YOLO 모델: {model_path}")
         model = YOLO(str(model_path))
         base.validate_model(model)
+        timer.lap("보정 파일·YOLO 모델 로드")
         cap = base.open_camera()
+        timer.lap("팔 카메라 열기")
         # The first inference runs while the arm initializes, not at -140 deg.
         detector_warmup = threading.Thread(
             target=warm_up_detector, args=(model,), daemon=True)
         detector_warmup.start()
         require_start()
         raise_if_cancelled(cancel_callback)
+        timer.reset()  # START_AUTO 입력 대기 시간은 빼고 잰다
 
         print("OMX 로봇팔에 연결합니다.")
         arm = OmxFollower().connect()
+        timer.lap("OMX 연결")
         camera_joints = calibration["camera_joints"]
         base_joint1_deg = float(np.degrees(camera_joints[0]))
         default_gripper_value = initialize_arm_for_scan(arm, camera_joints)
         print(f"시작 시 기본 그리퍼 폭 저장: {default_gripper_value:.3f}")
+        timer.lap("준비 동작 (그리퍼→READY→카메라 자세)")
         safe_to_park = True
 
         detector_warmup.join()
+        timer.lap("YOLO 워밍업 대기")
         clusters: list[PumpkinCluster] = []
         emit_feedback(feedback_callback, successes, "scanning")
         for commanded in SCAN_OFFSETS_DEG:
@@ -701,12 +727,14 @@ def main(
             safe_to_park = False
             move_to_scan_view(arm, view_joints, commanded, delta)
             current_scan_offset = float(commanded)
+            timer.lap(f"{commanded:+d}도 이동")
             wait_for_scan_settle(
                 arm,
                 view_joints,
                 base.SETTLE_TIME_SEC,
                 cancel_callback,
             )
+            timer.lap(f"{commanded:+d}도 안정 대기")
             measured = np.asarray(arm.joints(), dtype=float)
             measured_offset = float(np.degrees(measured[0])) - base_joint1_deg
             tracks, cap = observe_angle(
@@ -718,6 +746,7 @@ def main(
                 measured_offset,
             )
             raise_if_cancelled(cancel_callback)
+            timer.lap(f"{commanded:+d}도 촬영·검출")
             print(f"{commanded:+d}도 안정 검출: {len(tracks)}개")
             for track in tracks:
                 add_global_track(clusters, track)
@@ -729,9 +758,11 @@ def main(
         cap.release()
         cap = None
         cv2.destroyAllWindows()
+        timer.lap("카메라 해제 (여기까지 = 연결~스캔 끝)")
 
         raise_if_cancelled(cancel_callback)
         ripe_clusters = print_summary(clusters)
+        timer.reset()  # 수확 시작 확인(Enter) 대기 시간은 빼고 잰다
         detected_ripe_count = len(ripe_clusters)
         if (ripe_clusters and HARVEST_FROM_LAST_SCAN_VIEW
                 and before_harvest is None):
@@ -754,11 +785,13 @@ def main(
                 detected_ripe_count,
                 attempted_count,
             )
+        timer.lap("스캔 후 복귀")
         ripe_clusters = prepare_harvest_targets(
             arm,
             calibration,
             ripe_clusters,
         )
+        timer.lap("수확 목표 사전 계산 (IK)")
         # Pre-scan: hold here (camera released, arm at the central pose)
         # until Pinky's /harvest goal arrives; the scan is never repeated.
         if before_harvest is not None and not before_harvest():
