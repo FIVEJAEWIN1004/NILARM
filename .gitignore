@@ -20,3 +20,7 @@ __pycache__/
 # Laptop -> Pinky HSV deploy target (ksam_hsv_calibrate): local only
 /.nilarm_pinky_env
 /.nilarm_logs/
+
+# Hand-made backups (*.bak_before_*, ksam_hsv_calibrate *.bak_hsv_*): local only
+*.bak
+*.bak_*
