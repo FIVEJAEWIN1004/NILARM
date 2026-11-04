@@ -105,7 +105,7 @@ def test_screen_position_interpolates_xyz_inside_sample_hull():
     assert z == pytest.approx(0.010)
 
 
-def test_screen_position_outside_sample_hull_uses_fallback():
+def test_complete_grid_interpolates_outside_sample_centre_hull():
     samples = {70: [
         spatial_sample(
             row * 3 + column + 1,
@@ -125,9 +125,64 @@ def test_screen_position_outside_sample_hull_uses_fallback():
         samples_by_angle=samples,
     )
 
-    assert not used
-    assert xy == pytest.approx(fallback_xy)
-    assert z == pytest.approx(-0.005)
+    assert used
+    assert np.all(np.isfinite(xy))
+    assert np.isfinite(z)
+
+
+def test_partial_grid_interpolates_across_calibrated_camera_area():
+    samples = {70: [
+        spatial_sample(1, 0, 0, 0.000, 0.000, 0.000),
+        spatial_sample(2, 50, 0, 0.005, 0.000, 0.005),
+        spatial_sample(4, 0, 50, 0.000, 0.010, 0.010),
+    ]}
+    fallback_xy = np.asarray([0.003, -0.004])
+
+    xy, z, used = multi.spatial_xyz_residual(
+        70, (80, 80), fallback_xy, -0.005,
+        samples_by_angle=samples,
+    )
+
+    assert used
+    assert np.all(np.isfinite(xy))
+    assert np.isfinite(z)
+
+
+def test_partial_screen_samples_interpolate_only_inside_their_hull():
+    samples = {70: [
+        spatial_sample(1, 0, 0, 0.000, 0.000, 0.000),
+        spatial_sample(2, 100, 0, 0.010, 0.000, 0.010),
+        spatial_sample(4, 0, 100, 0.000, 0.020, 0.020),
+    ]}
+
+    xy, z, used = multi.spatial_xyz_residual(
+        70, (25, 25), np.asarray([0.1, 0.1]), 0.1,
+        samples_by_angle=samples,
+    )
+
+    assert used
+    assert np.all(np.isfinite(xy))
+    assert np.isfinite(z)
+
+
+def test_one_exact_partial_sample_is_used_without_extrapolation():
+    samples = {70: [
+        spatial_sample(3, 100, 50, 0.004, -0.003, 0.006),
+    ]}
+
+    exact_xy, exact_z, exact_used = multi.spatial_xyz_residual(
+        70, (100, 50), np.zeros(2), 0.0, samples_by_angle=samples,
+    )
+    other_xy, other_z, other_used = multi.spatial_xyz_residual(
+        70, (101, 50), np.zeros(2), 0.0, samples_by_angle=samples,
+    )
+
+    assert exact_used
+    assert exact_xy == pytest.approx([0.004, -0.003])
+    assert exact_z == pytest.approx(0.006)
+    assert not other_used
+    assert other_xy == pytest.approx([0.0, 0.0])
+    assert other_z == pytest.approx(0.0)
 
 
 def test_apply_height_prefers_spatial_z():

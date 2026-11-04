@@ -55,7 +55,7 @@ HIGH_MOVE_DURATION_SEC = 12.0
 LOWER_MOVE_DURATION_SEC = 8.0
 RETURN_DURATION_SEC = 12.0
 SCAN_STEP_DURATION_SEC = 6.0
-SPATIAL_SAMPLE_MIN_COUNT = 9
+SPATIAL_SAMPLE_MIN_COUNT = 3
 SPATIAL_NEIGHBOR_COUNT = 4
 
 
@@ -187,27 +187,30 @@ def spatial_xyz_residual(
         samples_by_angle = load_angle_spatial_samples()
     angle = int(round(float(commanded_offset_deg)))
     samples = samples_by_angle.get(angle, [])
-    if (
-        len(samples) < SPATIAL_SAMPLE_MIN_COUNT
-        or len({int(item["grid_slot"]) for item in samples}) < 9
-    ):
+    if not samples:
         return fallback_xy.copy(), fallback_z, False
 
     query = np.asarray(selected_pixel, dtype=float)
     pixels = np.asarray([item["pixel"] for item in samples], dtype=np.float32)
-    hull = cv2.convexHull(pixels.reshape(-1, 1, 2))
-    if len(hull) < 3 or abs(cv2.contourArea(hull)) < 1.0:
-        return fallback_xy.copy(), fallback_z, False
-    if cv2.pointPolygonTest(
-        hull, (float(query[0]), float(query[1])), False
-    ) < 0:
-        return fallback_xy.copy(), fallback_z, False
-
     distances = np.linalg.norm(pixels.astype(float) - query, axis=1)
     exact = np.flatnonzero(distances < 1e-6)
     if exact.size:
         sample = samples[int(exact[0])]
         return sample["xy"].copy(), float(sample["z"]), True
+
+    distinct_slots = {int(item["grid_slot"]) for item in samples}
+    if (
+        len(samples) < SPATIAL_SAMPLE_MIN_COUNT
+        or len(distinct_slots) < SPATIAL_SAMPLE_MIN_COUNT
+    ):
+        return fallback_xy.copy(), fallback_z, False
+
+    # build_rotated_target() has already limited the query to the camera's
+    # calibrated cyan polygon.  Within that trusted area, three or more
+    # distinct saved cells are enough to use nearest-four IDW, including
+    # positions outside the sample-centre hull.  This lets operators omit
+    # screen cells that the competition scene never uses without disabling
+    # verification elsewhere in the calibrated camera area.
 
     nearest = np.argsort(distances)[:SPATIAL_NEIGHBOR_COUNT]
     weights = 1.0 / np.square(np.maximum(distances[nearest], 1e-6))

@@ -44,18 +44,71 @@ def test_calibration_keeps_only_move_grasp_confirmation():
     assert "PREALIGN 입력" not in source
     assert 'MOVE_HIGH 입력' not in source
     assert 'MOVE_30 입력' not in source
-    assert 'MOVE_GRASP 입력' in source
+    assert "confirm_move_to_grasp()" in source
+    assert "bypass_high_delta_guard=True" in source
+
+
+def test_grid_session_can_finish_selected_slots_without_all_nine():
+    source = inspect.getsource(grid_adjust.main)
+    assert 'command in {"D", "DONE"}' in source
+    assert "while ready_for_verification" in source
+    assert 'command in {"R", "RECALIBRATE"}' in source
+    assert "recalibrate_only_slots = set(done)" in source
+    assert "미저장 칸 추가는 Enter" in source
+
+
+def test_recalibration_mode_rejects_an_unsaved_slot_before_arm_motion():
+    source = inspect.getsource(grid_adjust.calibrate_one_sample)
+    rejection = source.index("grid_slot not in recalibrate_only_slots")
+    first_move = source.index("arm.move_joints")
+    assert rejection < first_move
+
+
+def test_completed_grid_can_recalibrate_or_start_verification():
+    source = inspect.getsource(grid_adjust.main)
+    assert 'command in {"V", "VERIFY"}' in source
+    assert 'command not in {"R", "RECALIBRATE"}' in source
+    assert "기존 값이 교체됩니다" in source
 
 
 def test_completed_grid_runs_real_grasp_verification():
     source = inspect.getsource(grid_adjust.verify_saved_grid)
     assert grid_adjust.VERIFY_LIFT_M == pytest.approx(0.030)
-    assert 'VERIFY_GRASP 입력' in source
+    assert "검증 물체가 확인되어 자동 파지를 시작합니다" in source
     assert "arm.close_gripper" in source
     assert "arm.open_gripper" in source
     assert "z_offset + VERIFY_LIFT_M" in source
-    assert '"PASS"' in source
-    assert '"RECALIBRATE"' in source
+    assert "ask_verification_result" not in source
+
+
+def test_next_verification_continues_on_enter(monkeypatch):
+    answers = iter(["WRONG", ""])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    assert grid_adjust.ask_next_verification()
+
+
+def test_next_verification_only_stops_on_explicit_q(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda _prompt: "q")
+    assert not grid_adjust.ask_next_verification()
+
+
+def test_single_key_jog_shortcuts_keep_long_commands_compatible():
+    expected = {
+        "W": "TOWARD_BASE", "X": "AWAY_BASE",
+        "A": "BASE_LEFT", "D": "BASE_RIGHT",
+        "R": "Z_UP", "F": "Z_DOWN", "2": "STEP_2",
+        "5": "STEP_5", "U": "UNDO", "S": "SAVE", "Q": "Q",
+    }
+    for key, command in expected.items():
+        assert adjust.normalize_jog_command(key) == command
+        assert adjust.normalize_jog_command(command) == command
+
+
+def test_grid_session_requires_three_successful_grasp_verifications():
+    source = inspect.getsource(grid_adjust.main)
+    assert grid_adjust.REQUIRED_VERIFICATION_PASSES == 3
+    assert "verification_passes += 1" in source
+    assert "verification_passes >= REQUIRED_VERIFICATION_PASSES" in source
 
 
 def test_grid_session_tracks_completed_slots(tmp_path, monkeypatch):

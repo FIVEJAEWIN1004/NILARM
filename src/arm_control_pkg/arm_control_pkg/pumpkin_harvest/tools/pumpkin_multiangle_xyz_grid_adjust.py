@@ -20,6 +20,32 @@ VERIFY_HOLD_SEC = 1.0
 VERIFY_GRIPPER_CLOSE_DURATION_SEC = 4.0
 VERIFY_GRIPPER_OPEN_DURATION_SEC = 3.0
 VERIFY_LIFT_DURATION_SEC = 6.0
+REQUIRED_VERIFICATION_PASSES = 3
+
+
+def ask_next_verification() -> bool:
+    """Continue on Enter and stop only on an explicit Q."""
+    while True:
+        command = input(
+            "다음 파지 검증은 Enter, 검증 종료는 Q: "
+        ).strip().upper()
+        if not command:
+            return True
+        if command == "Q":
+            return False
+        print("Enter 또는 Q를 입력하세요.")
+
+
+def confirm_move_to_grasp() -> bool:
+    while True:
+        command = input(
+            "기존 Z 파지 높이로 이동하려면 G, 취소는 Q 입력: "
+        ).strip().upper().replace("-", "_")
+        if command in {"G", "MOVE_GRASP"}:
+            return True
+        if command == "Q":
+            return False
+        print("G 또는 Q를 입력하세요.")
 
 
 def completed_slots(angle: int) -> list[int]:
@@ -64,10 +90,13 @@ def return_to_same_view(
     )
 
 
-def select_one(model, calibration):
+def select_one(model, calibration, *, recalibrate_existing=False):
     cap = base.open_camera()
     try:
-        print("자주색 격자의 아직 저장하지 않은 칸에 호박 하나를 놓으세요.")
+        if recalibrate_existing:
+            print("덮어쓸 기존 보정 칸에 호박 하나를 놓으세요.")
+        else:
+            print("자주색 격자의 보정할 칸에 호박 하나를 놓으세요.")
         return base.choose_pumpkin(
             model, cap, calibration, show_grid=True
         )
@@ -84,15 +113,29 @@ def calibrate_one_sample(
     commanded_offset_deg,
     measured_offset_deg,
     view_joints,
+    recalibrate_only_slots=None,
 ):
     """Calibrate one grid cell and return (saved, stop_session)."""
-    selected = select_one(model, calibration)
+    selected = select_one(
+        model,
+        calibration,
+        recalibrate_existing=recalibrate_only_slots is not None,
+    )
     if selected is None:
         return False, True
     grid_slot, grid_label = common.grid_slot_for_pixel(
         selected, calibration["image_points"]
     )
     print(f"선택 위치: {grid_slot}번 ({grid_label})")
+    if (
+        recalibrate_only_slots is not None
+        and grid_slot not in recalibrate_only_slots
+    ):
+        print(
+            f"{grid_slot}번은 기존 저장 칸이 아니므로 재보정하지 않습니다. "
+            "저장된 칸을 선택하세요."
+        )
+        return False, False
 
     target = multi.build_rotated_target(
         calibration,
@@ -116,6 +159,11 @@ def calibrate_one_sample(
         start_joints,
         calibration["pitch_rad"],
         calibration["roll_rad"],
+        # Calibration only uses the +80/+30 mm poses to validate that IK
+        # exists; it moves directly from prealign to the checked grasp pose.
+        # Let the arm's real joint limits, rather than the conservative
+        # first-approach delta guard, define the maximum reachable motion.
+        bypass_high_delta_guard=True,
     )
     multi.print_plan(
         target,
@@ -136,9 +184,7 @@ def calibrate_one_sample(
         ),
     )
     print("80mm/30mm 자세는 IK 검증만 하고 실제 이동하지 않습니다.")
-    if input(
-        "기존 Z 파지 높이로 직접 이동하려면 MOVE_GRASP 입력: "
-    ).strip() != "MOVE_GRASP":
+    if not confirm_move_to_grasp():
         arm.move_joints(
             view_joints,
             duration=common.angle_move_duration(
@@ -180,7 +226,7 @@ def calibrate_one_sample(
             f"{total_local[1] * 1000:+.1f})mm, "
             f"Z={current_z_offset * 1000:+.1f}mm"
         )
-        command = input("명령: ").strip().upper()
+        command = common.normalize_jog_command(input("명령: "))
         if command == "STEP_2":
             step_m = common.SMALL_STEP_M
             common.print_controls(step_m)
@@ -321,6 +367,7 @@ def verify_saved_grid(
         start_joints,
         calibration["pitch_rad"],
         calibration["roll_rad"],
+        bypass_high_delta_guard=True,
     )
     grasp_joints = common.solve_pose(
         arm,
@@ -348,19 +395,7 @@ def verify_saved_grid(
             multi.movement_duration(prealign_delta_deg)
         ),
     )
-    confirmation = input(
-        "실제 파지·30mm 시험 리프트·원위치 놓기를 실행하려면 "
-        "VERIFY_GRASP 입력: "
-    ).strip().upper()
-    if confirmation != "VERIFY_GRASP":
-        arm.move_joints(
-            view_joints,
-            duration=common.angle_move_duration(
-                np.degrees(prealign_joints[0] - view_joints[0])
-            ),
-        )
-        return False, True
-
+    print("검증 물체가 확인되어 자동 파지를 시작합니다.")
     print("[검증] 저장된 9점 XYZ 보간 위치로 이동합니다.")
     arm.move_joints(
         grasp_joints,
@@ -394,17 +429,8 @@ def verify_saved_grid(
         view_joints,
     )
 
-    result = input(
-        "파지 검증 성공이면 PASS, 문제 구역을 다시 보정하려면 "
-        "RECALIBRATE 입력: "
-    ).strip().upper()
-    if result == "PASS":
-        print("9점 XYZ 실제 파지 검증을 통과했습니다.")
-        return True, False
-    if result == "RECALIBRATE":
-        return False, False
-    print("PASS/RECALIBRATE가 아니므로 검증 세션을 종료합니다.")
-    return False, True
+    print("이번 실제 파지 검증을 완료했습니다.")
+    return True, False
 
 
 def main():
@@ -446,16 +472,52 @@ def main():
         measured = np.asarray(arm.joints(), dtype=float)
         measured_offset = float(np.degrees(measured[0])) - base_joint1_deg
 
-        all_nine_completed = False
+        ready_for_verification = False
         while True:
+            recalibrate_only_slots = None
             done = completed_slots(angle_key)
             missing = [slot for slot in range(1, 10) if slot not in done]
             print(f"\n{angle_key:+d}도 저장 완료: {done or '없음'}")
             print(f"남은 칸: {missing or '없음'}")
             if not missing:
                 print("이 각도의 9점 XYZ 보정이 모두 완료됐습니다.")
-                all_nine_completed = True
-                break
+                command = input(
+                    "검증은 V, 원하는 칸 재보정은 R, 종료는 Q: "
+                ).strip().upper()
+                if command in {"V", "VERIFY"}:
+                    ready_for_verification = True
+                    break
+                if command == "Q":
+                    break
+                if command not in {"R", "RECALIBRATE"}:
+                    print("V / R / Q 중 하나를 입력하세요.")
+                    continue
+                recalibrate_only_slots = set(done)
+                print(
+                    "다시 보정할 위치에 호박을 놓으세요. S로 저장하면 해당 "
+                    "칸의 기존 값이 교체됩니다."
+                )
+            if done:
+                if missing:
+                    command = input(
+                        "기존 칸 재보정은 R, 현재 값으로 검증은 D, "
+                        "미저장 칸 추가는 Enter, 종료는 Q: "
+                    ).strip().upper()
+                    if command in {"R", "RECALIBRATE"}:
+                        recalibrate_only_slots = set(done)
+                        print(
+                            f"재보정 가능 칸: {done}. "
+                            f"미저장 칸 {missing}은 건너뜁니다."
+                        )
+                    if command in {"D", "DONE"}:
+                        print(
+                            f"저장된 {len(done)}개 칸만 사용해 실제 파지 검증으로 "
+                            "진행합니다."
+                        )
+                        ready_for_verification = True
+                        break
+                    if command == "Q":
+                        break
             # From here until the helper returns, do not assume a safe pose;
             # an exception during direct approach must not trigger an
             # automatic centre sweep from an unknown arm configuration.
@@ -468,6 +530,7 @@ def main():
                 angle,
                 measured_offset,
                 view_joints,
+                recalibrate_only_slots=recalibrate_only_slots,
             )
             at_view = True
             if stop:
@@ -475,7 +538,12 @@ def main():
             if not saved:
                 print("표본을 저장하지 않았습니다.")
 
-        while all_nine_completed:
+        verification_passes = 0
+        while ready_for_verification:
+            print(
+                "\n실제 파지 검증 "
+                f"{verification_passes + 1}/{REQUIRED_VERIFICATION_PASSES}"
+            )
             at_view = False
             verified, stop = verify_saved_grid(
                 arm,
@@ -487,22 +555,21 @@ def main():
                 view_joints,
             )
             at_view = True
-            if verified or stop:
-                break
-            print("문제가 있었던 화면 구역의 표본을 다시 보정합니다.")
-            at_view = False
-            _saved, stop = calibrate_one_sample(
-                arm,
-                model,
-                calibration,
-                existing_residuals,
-                angle,
-                measured_offset,
-                view_joints,
-            )
-            at_view = True
             if stop:
                 break
+            if verified:
+                verification_passes += 1
+                print(
+                    "파지 검증 통과: "
+                    f"{verification_passes}/{REQUIRED_VERIFICATION_PASSES}"
+                )
+                if verification_passes >= REQUIRED_VERIFICATION_PASSES:
+                    print("실제 파지 검증을 총 3회 통과했습니다.")
+                    break
+                if not ask_next_verification():
+                    print("사용자가 파지 검증을 종료했습니다.")
+                    break
+                continue
 
         arm.move_joints(
             camera_joints,
