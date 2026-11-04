@@ -64,13 +64,13 @@ class PinkyStatusDisplay(Node):
 
         # LCD is initialized first because both vendor libraries configure
         # hardware resources during construction. Each object is then reused.
-        try:
-            self._lcd = LCD()
-            self._show_black_screen()
-        except Exception as error:
-            self._lcd = None
-            self.get_logger().error(
-                f'LCD initialization failed; display disabled: {error}')
+        # GPIO claims race other nodes starting at the same moment ('GPIO not
+        # allocated', ~2 in 90 launches): retry, and again on first use.
+        for attempt in range(3):
+            if attempt:
+                time.sleep(0.5)
+            if self._ensure_lcd():
+                break
 
         try:
             self._led = LED()
@@ -136,6 +136,19 @@ class PinkyStatusDisplay(Node):
         except Exception as error:
             self.get_logger().error(f'LED write failed: {error}')
 
+    def _ensure_lcd(self):
+        if self._lcd is not None:
+            return True
+        try:
+            self._lcd = LCD()
+            self._show_black_screen()
+            return True
+        except Exception as error:
+            self._lcd = None
+            self.get_logger().error(
+                f'LCD initialization failed; display disabled: {error}')
+            return False
+
     def _show_black_screen(self):
         if self._lcd is not None:
             self._lcd.img_show(Image.new('RGB', LCD_SIZE, 'black'))
@@ -175,7 +188,7 @@ class PinkyStatusDisplay(Node):
         if mode != 'IMAGE':
             self.get_logger().warning(f'Unknown display mode: {message.data!r}')
             return
-        if self._lcd is None or self._image is None:
+        if not self._ensure_lcd() or self._image is None:
             self.get_logger().error('Cannot show IMAGE: LCD or image unavailable')
             return
         try:
@@ -190,7 +203,7 @@ class PinkyStatusDisplay(Node):
         if not text:
             self.get_logger().warning('Ignoring empty harvest display result')
             return
-        if self._lcd is None:
+        if not self._ensure_lcd():
             self.get_logger().error(
                 f'Cannot display harvest result because LCD is unavailable: {text}')
             return
