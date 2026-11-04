@@ -185,6 +185,9 @@ class CameraStraightDrive(Node):
         self.declare_parameter('final_camera_distance_m', 0.45)
         self.declare_parameter('final_camera_linear_speed', 0.20)
         self.declare_parameter('final_camera_detect_timeout_sec', 1.0)
+        # ① lost line: hold the heading this long, then FAULT. ⑪ never faults
+        # on a lost line: it holds the heading until the line returns.
+        self.declare_parameter('camera_line_loss_hold_sec', 0.3)
         # ⑫: after ⑪, odom straight (heading held) for this distance, then stop.
         self.declare_parameter('final_straight_distance_m', 0.45)
         self.declare_parameter('final_straight_linear_speed', 0.20)
@@ -218,6 +221,12 @@ class CameraStraightDrive(Node):
         # <= 0: latch the scene brightness of the first frames after start.
         self.declare_parameter('hsv_adaptive_reference_v', 0.0)
         self.declare_parameter('hsv_adaptive_roi_y_ratio', 0.65)
+        # Second try when the HSV mask finds no line: Lab b* (yellowness) is
+        # far less sensitive to shadow/glare than V/S. a* upper bound rejects
+        # orange/red. Off by default: the node behaves exactly as before.
+        self.declare_parameter('yellow_lab_fallback_enabled', False)
+        self.declare_parameter('yellow_lab_b_low', 145)
+        self.declare_parameter('yellow_lab_a_high', 140)
 
         self._load_parameters()
         self._validate_parameters()
@@ -304,6 +313,7 @@ class CameraStraightDrive(Node):
         self.next_stop_target_yaw = None
         self.last_linear_command = 0.0
         self.path_detected = False
+        self.line_source = None  # 'HSV' / 'LAB' while a line is fitted
         self.boundary_x = None
         self.target_x = int(round(self.target_x_config))
         self.path_error = None
@@ -545,6 +555,11 @@ class CameraStraightDrive(Node):
             self.get_parameter('final_camera_linear_speed').value)
         self.final_camera_detect_timeout = float(
             self.get_parameter('final_camera_detect_timeout_sec').value)
+        self.camera_line_loss_hold = float(
+            self.get_parameter('camera_line_loss_hold_sec').value)
+        self.line_lost_since = None
+        self.line_hold_yaw = 0.0
+        self.final_camera_line_seen = False
         self.final_camera_start_x = None
         self.final_camera_start_y = None
         self.final_camera_started_at = None
@@ -597,6 +612,12 @@ class CameraStraightDrive(Node):
             self.get_parameter('hsv_adaptive_reference_v').value)
         self.hsv_adaptive_roi_y_ratio = float(
             self.get_parameter('hsv_adaptive_roi_y_ratio').value)
+        self.yellow_lab_fallback_enabled = bool(
+            self.get_parameter('yellow_lab_fallback_enabled').value)
+        self.yellow_lab_b_low = int(
+            self.get_parameter('yellow_lab_b_low').value)
+        self.yellow_lab_a_high = int(
+            self.get_parameter('yellow_lab_a_high').value)
 
     def _validate_parameters(self):
         if not 0.0 < self.max_linear_speed <= 0.10:
@@ -752,6 +773,8 @@ class CameraStraightDrive(Node):
                 f'(0.0, {FINAL_CAMERA_MAX_LINEAR_SPEED}] m/s')
         if self.final_camera_detect_timeout <= 0.0:
             raise ValueError('final_camera_detect_timeout_sec must be positive')
+        if self.camera_line_loss_hold < 0.0:
+            raise ValueError('camera_line_loss_hold_sec must be nonnegative')
         if self.next_stop_wait_sec < 0.0:
             raise ValueError('next_stop_wait_sec must be nonnegative')
         if (self.next_stop2_target_forward < 0.0
@@ -794,6 +817,12 @@ class CameraStraightDrive(Node):
         ]
         if not all(0 <= value <= 255 for value in hsv_values):
             raise ValueError('HSV parameters must be within [0, 255]')
+        # 128 = neutral in OpenCV 8-bit Lab; b_low at/below it would accept
+        # grey floor, a_high below it would reject the yellow itself.
+        if not 128 < self.yellow_lab_b_low <= 255:
+            raise ValueError('yellow_lab_b_low must be in (128, 255]')
+        if not 128 <= self.yellow_lab_a_high <= 255:
+            raise ValueError('yellow_lab_a_high must be in [128, 255]')
         if self.hsv_adaptive_enabled:
             if not 0.0 < self.hsv_adaptive_ema_alpha <= 1.0:
                 raise ValueError('hsv_adaptive_ema_alpha must be in (0, 1]')
@@ -840,60 +869,19 @@ class CameraStraightDrive(Node):
         ], dtype=np.uint8)
         if self.hsv_adaptive_enabled:
             lower, upper = self._adapt_yellow_sv(frame, lower, upper)
-        mask = cv2.inRange(hsv, lower, upper)
-        kernel = np.ones((5, 5), dtype=np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-        contours, _ = cv2.findContours(
-            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        min_height = roi.shape[0] * self.min_boundary_height_ratio
-        candidates = []
-        for contour in contours:
-            x, y, box_width, box_height = cv2.boundingRect(contour)
-            area = cv2.contourArea(contour)
-            if area >= self.min_boundary_area and box_height >= min_height:
-                # Height is weighted strongly so a long boundary is preferred
-                # over a compact yellow object with a similar area.
-                score = box_height * 10.0 + area / max(box_width, 1)
-                candidates.append((score, contour))
-        if not candidates:
+        source = 'HSV'
+        boundary_x = self._fit_boundary(
+            cv2.inRange(hsv, lower, upper), top, left, height)
+        if boundary_x is None and self.yellow_lab_fallback_enabled:
+            source = 'LAB'
+            boundary_x = self._fit_boundary(
+                self._lab_yellow_mask(roi), top, left, height)
+        if boundary_x is None:
             self._clear_detection()
-            if self.state in CAMERA_STATES:
-                self._enter_fault('yellow boundary detection lost')
             return
-
-        contour = max(candidates, key=lambda item: item[0])[1]
-        contour_mask = np.zeros_like(mask)
-        cv2.drawContours(contour_mask, [contour], -1, 255, thickness=-1)
-
-        # Use the road-facing (rightmost) yellow edge from every image row.
-        # This gives many points for x=f(y), rather than one contour center.
-        edge_y = []
-        edge_x = []
-        for local_y in range(contour_mask.shape[0]):
-            columns = np.flatnonzero(contour_mask[local_y])
-            if columns.size:
-                edge_y.append(float(top + local_y))
-                edge_x.append(float(left + columns.max()))
-        if len(edge_x) < self.min_line_points:
-            self._clear_detection()
-            if self.state in CAMERA_STATES:
-                self._enter_fault('not enough yellow edge points for line fit')
-            return
-
-        edge_y = np.asarray(edge_y)
-        edge_x = np.asarray(edge_x)
-        slope, intercept = np.polyfit(edge_y, edge_x, 1)
-        residual = np.abs(edge_x - (slope * edge_y + intercept))
-        inliers = residual <= self.line_fit_max_residual
-        if int(np.count_nonzero(inliers)) < self.min_line_points:
-            self._clear_detection()
-            if self.state in CAMERA_STATES:
-                self._enter_fault('yellow boundary line fit rejected')
-            return
-        slope, intercept = np.polyfit(edge_y[inliers], edge_x[inliers], 1)
-        evaluation_y = height * self.boundary_eval_y_ratio
-        boundary_x = slope * evaluation_y + intercept
+        if source != self.line_source:
+            self.get_logger().warning(f'yellow line source: {source}')
+        self.line_source = source
 
         # In the centered calibration image, boundary_reference_x corresponds
         # to a desired path at target_x. Boundary movement shifts that
@@ -913,6 +901,59 @@ class CameraStraightDrive(Node):
         self.target_x = int(round(self.target_x_config))
         self.path_error = int(round(error))
         self._set_camera_steering(angular)
+
+    def _lab_yellow_mask(self, roi):
+        """Yellowness mask: b* high (yellow), a* not high (not orange/red)."""
+        lab = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB)
+        b_ok = lab[:, :, 2] >= self.yellow_lab_b_low
+        a_ok = lab[:, :, 1] <= self.yellow_lab_a_high
+        return (b_ok & a_ok).astype(np.uint8) * 255
+
+    def _fit_boundary(self, mask, top, left, height):
+        """Return the fitted boundary x at boundary_eval_y_ratio, or None."""
+        kernel = np.ones((5, 5), dtype=np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        contours, _ = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        min_height = mask.shape[0] * self.min_boundary_height_ratio
+        candidates = []
+        for contour in contours:
+            x, y, box_width, box_height = cv2.boundingRect(contour)
+            area = cv2.contourArea(contour)
+            if area >= self.min_boundary_area and box_height >= min_height:
+                # Height is weighted strongly so a long boundary is preferred
+                # over a compact yellow object with a similar area.
+                score = box_height * 10.0 + area / max(box_width, 1)
+                candidates.append((score, contour))
+        if not candidates:
+            return None
+
+        contour = max(candidates, key=lambda item: item[0])[1]
+        contour_mask = np.zeros_like(mask)
+        cv2.drawContours(contour_mask, [contour], -1, 255, thickness=-1)
+
+        # Use the road-facing (rightmost) yellow edge from every image row.
+        # This gives many points for x=f(y), rather than one contour center.
+        edge_y = []
+        edge_x = []
+        for local_y in range(contour_mask.shape[0]):
+            columns = np.flatnonzero(contour_mask[local_y])
+            if columns.size:
+                edge_y.append(float(top + local_y))
+                edge_x.append(float(left + columns.max()))
+        if len(edge_x) < self.min_line_points:
+            return None
+
+        edge_y = np.asarray(edge_y)
+        edge_x = np.asarray(edge_x)
+        slope, intercept = np.polyfit(edge_y, edge_x, 1)
+        residual = np.abs(edge_x - (slope * edge_y + intercept))
+        inliers = residual <= self.line_fit_max_residual
+        if int(np.count_nonzero(inliers)) < self.min_line_points:
+            return None
+        slope, intercept = np.polyfit(edge_y[inliers], edge_x[inliers], 1)
+        return slope * height * self.boundary_eval_y_ratio + intercept
 
     def _in_second_next_stop(self):
         return (self.state == DriveState.STATION_TO_NEXT_STOP
@@ -1121,19 +1162,40 @@ class CameraStraightDrive(Node):
             self._control_final_straight(now)
 
     def _control_camera_drive(self, now):
-        if self._is_stale(now, self.last_frame_time, self.frame_timeout):
-            self._enter_fault('camera frame timeout')
-            return
-        if not self.path_detected:
-            self._enter_fault('yellow boundary unavailable')
-            return
+        stale = self._is_stale(now, self.last_frame_time, self.frame_timeout)
+        angular = self.steering_command
+        if stale or not self.path_detected:
+            # Line lost (or no frames): hold the heading from the moment it
+            # was lost. ① gives up after camera_line_loss_hold_sec; ⑪ keeps
+            # going (⑫ after it is odom-only anyway).
+            reason = 'camera frame timeout' if stale else 'yellow boundary unavailable'
+            if self.line_lost_since is None:
+                self.line_lost_since = now
+                self.line_hold_yaw = self.current_yaw
+                self.get_logger().warning(
+                    f'{self.state}: {reason}; holding heading')
+            lost = (now - self.line_lost_since).nanoseconds / 1e9
+            if (self.state == DriveState.CAMERA_DRIVING
+                    and lost > self.camera_line_loss_hold):
+                self._enter_fault(f'{reason} for {lost:.2f}s')
+                return
+            yaw_error = self._normalize_angle(
+                self.line_hold_yaw - self.current_yaw)
+            angular = max(-self.max_angular_speed,
+                          min(self.max_angular_speed,
+                              self.curve_kp_yaw * yaw_error))
+        elif self.line_lost_since is not None:
+            lost = (now - self.line_lost_since).nanoseconds / 1e9
+            self.get_logger().warning(
+                f'{self.state}: line back after {lost:.2f}s')
+            self.line_lost_since = None
 
         command = Twist()
         if self.state == DriveState.FINAL_CAMERA_DRIVING:
             command.linear.x = self.final_camera_linear_speed
         else:
             command.linear.x = self.linear_speed
-        command.angular.z = self.steering_command
+        command.angular.z = angular
         self.cmd_pub.publish(command)
         self.last_linear_command = command.linear.x
         if not self.command_active:
@@ -1797,6 +1859,8 @@ class CameraStraightDrive(Node):
         self.final_camera_start_y = self.current_y
         self.final_camera_started_at = now
         self.final_camera_distance = 0.0
+        self.final_camera_line_seen = line_ready
+        self.line_lost_since = None
         self.state = DriveState.FINAL_CAMERA_DRIVING
         if line_ready:
             self.steering_command = getattr(
@@ -1814,7 +1878,9 @@ class CameraStraightDrive(Node):
                else 'waiting for line fit'))
 
     def _control_final_camera_drive(self, now):
-        if not self.path_detected:
+        if self.path_detected:
+            self.final_camera_line_seen = True
+        elif not self.final_camera_line_seen:
             elapsed = (now - self.final_camera_started_at).nanoseconds / 1e9
             if elapsed < self.final_camera_detect_timeout:
                 self._publish_stop()
@@ -2503,6 +2569,7 @@ class CameraStraightDrive(Node):
         self.enabled = True
         self.sequence_active = True
         self.command_active = False
+        self.line_lost_since = None
         self.state = DriveState.CAMERA_DRIVING
         response.success = True
         response.message = (

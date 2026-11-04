@@ -119,7 +119,14 @@ camera_straight_drive:
     # final_camera_distance_m, then ⑫. Code ceiling 0.20 m/s.
     final_camera_distance_m: 0.45
     final_camera_linear_speed: 0.20
-    final_camera_detect_timeout_sec: 1.0
+    # ⑪ start without a line: stay stopped and wait this long for a fit
+    # (blur after ⑩ / adaptive HSV settling), then drive on holding heading.
+    final_camera_detect_timeout_sec: 2.0
+    # Lost line while driving: hold the heading at the moment it was lost and
+    # return to line following as soon as it is back. ① FAULTs after this many
+    # seconds without the line; ⑪ never FAULTs on it (⑫ is odom-only anyway).
+    # (old 0.3) 1.0 s at ① 0.20 m/s = up to 20 cm on odom heading only.
+    camera_line_loss_hold_sec: 1.0
     # ⑫ after ⑪: odom straight holding ⑫'s start heading, same speed as ⑪,
     # then FINAL_REACHED. Timeout = FAULT (e.g. wheels blocked).
     final_straight_distance_m: 0.45
@@ -140,6 +147,13 @@ camera_straight_drive:
     yellow_s_high: 191
     yellow_v_low: 130
     yellow_v_high: 200
+    # HSV found no line in a frame -> retry the same fit on a Lab mask:
+    # b* >= b_low (yellowness, little shadow/glare effect), a* <= a_high (not
+    # orange/red). Log shows "yellow line source: LAB" when it takes over.
+    # Grey floor b* ~135, shadowed yellow ~150. false = HSV only (legacy).
+    yellow_lab_fallback_enabled: true
+    yellow_lab_b_low: 145
+    yellow_lab_a_high: 140
     # Runtime-only S/V widening around the yellow_* calibration (H never
     # changes, YAML is never rewritten). false = exact legacy thresholds.
     hsv_adaptive_enabled: true

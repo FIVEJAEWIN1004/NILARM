@@ -201,11 +201,21 @@ def make_final_camera_node(path_detected=True, elapsed=0.0):
         cmd_pub=types.SimpleNamespace(publish=published.append),
         stops=[],
         faults=[],
+        line_lost_since=None,
+        final_camera_line_seen=False,
+        camera_line_loss_hold=0.3,
+        current_yaw=0.0,
+        curve_kp_yaw=0.8,
+        max_angular_speed=0.15,
+        stale=False,
     )
     node.published = published
+    node.log = Log()
+    node.get_logger = lambda: node.log
+    node._normalize_angle = Drive._normalize_angle
     node._publish_stop = lambda repeat=1: node.stops.append(repeat)
     node._enter_fault = node.faults.append
-    node._is_stale = lambda now, stamp, timeout: False
+    node._is_stale = lambda now, stamp, timeout: node.stale
     node._control_camera_drive = Drive._control_camera_drive.__get__(node)
     return node
 
@@ -218,12 +228,47 @@ def test_final_camera_drives_at_one_and_half_times_camera_speed():
     assert node.faults == []
 
 
-def test_final_camera_waits_for_line_then_faults_after_timeout():
+def test_final_camera_waits_for_line_then_drives_on_holding_heading():
     node = make_final_camera_node(path_detected=False)
-    Drive._control_final_camera_drive(node, Clock(0.5))
+    node.final_camera_detect_timeout = 2.0
+    Drive._control_final_camera_drive(node, Clock(1.9))
     assert node.stops == [1] and node.published == [] and node.faults == []
-    Drive._control_final_camera_drive(node, Clock(1.0))
-    assert node.faults == ['yellow boundary unavailable']
+    # Never saw the line within the wait: drive on (⑫ is odom-only anyway).
+    node.current_yaw = 0.1
+    Drive._control_final_camera_drive(node, Clock(2.0))
+    assert node.faults == [] and node.published[-1].linear.x == pytest.approx(0.15)
+    assert node.published[-1].angular.z == pytest.approx(0.0)  # holds yaw 0.1
+
+
+def test_final_camera_lost_line_holds_heading_never_faults_then_resumes():
+    node = make_final_camera_node(path_detected=True)
+    Drive._control_final_camera_drive(node, Clock(0.1))  # line seen
+    node.path_detected, node.current_yaw = False, 0.2
+    Drive._control_final_camera_drive(node, Clock(0.2))  # lost: hold yaw 0.2
+    node.current_yaw = 0.25
+    for t in (0.5, 5.0):
+        Drive._control_final_camera_drive(node, Clock(t))
+        assert node.stops == [] and node.faults == []
+        assert node.published[-1].linear.x == pytest.approx(0.15)
+        assert node.published[-1].angular.z == pytest.approx(0.8 * -0.05)
+    node.path_detected = True
+    Drive._control_final_camera_drive(node, Clock(5.1))
+    assert node.published[-1].angular.z == pytest.approx(0.07)  # line steering
+    assert node.line_lost_since is None and 'line back after 4.90s' in node.log.lines[-1]
+
+
+@pytest.mark.parametrize('stale', [False, True])
+def test_first_leg_holds_heading_briefly_then_faults(stale):
+    node = make_final_camera_node(path_detected=stale)
+    node.state = drive.DriveState.CAMERA_DRIVING
+    node.stale = stale
+    Drive._control_camera_drive(node, Clock(1.0))
+    Drive._control_camera_drive(node, Clock(1.3))
+    assert node.faults == [] and node.published[-1].linear.x == pytest.approx(0.10)
+    assert node.published[-1].angular.z == pytest.approx(0.0)
+    Drive._control_camera_drive(node, Clock(1.31))
+    reason = 'camera frame timeout' if stale else 'yellow boundary unavailable'
+    assert node.faults == [f'{reason} for 0.31s']
 
 
 def test_final_camera_starts_straight_at_target_distance():
@@ -683,3 +728,14 @@ def test_station_curve_uses_its_own_speed_and_turn_cap():
     command = node.published[-1]
     assert 0.04 < command.linear.x <= 0.10
     assert -0.50 <= command.angular.z < -0.15
+
+
+def test_final_camera_detect_timeout_is_two_seconds():
+    config_path = (
+        __import__('pathlib').Path(__file__).resolve().parents[1]
+        / 'config' / 'camera_straight_drive.yaml'
+    )
+    params = yaml.safe_load(config_path.read_text())['camera_straight_drive'][
+        'ros__parameters']
+    assert params['final_camera_detect_timeout_sec'] == 2.0
+    assert params['camera_line_loss_hold_sec'] == 1.0
