@@ -122,5 +122,4 @@ python3 -m pytest -q src/arm_control_pkg/test/test_arm_camera.py
 - **안전 우선**: drive 노드는 DISABLED로 시작하고 `/camera_drive/enable` 전엔 zero Twist만 냄. 게이트 조건을 약화시키지 말 것.
 - 실물 하드웨어/캘리브레이션 값(yaml 튜닝값, `pumpkin_harvest/*.json`)은 현장 측정 결과임. 이유 없이 바꾸지 말 것.
 - `*.bak*` 파일은 수정 전 백업본 (git 미추적). 참고만 하고 편집 대상 아님.
-- `archive/` (`COLCON_IGNORE`) — 예전 `drive_pkg`, `nav_pkg`(Nav2/IR 정렬/라인 추종), `vision_pkg` 사본. 빌드 안 됨. `src/drive_pkg`, `src/nav_pkg`는 여기로 옮겨지는 중 (아직 커밋 전 삭제 상태).
-- 레포 루트의 `0`, `stop_test_full.log` (그리고 삭제 상태인 `포트가`)는 실수로 생긴 잔여물.
+- `archive/` (`COLCON_IGNORE`) — 예전 `drive_pkg`, `nav_pkg`(Nav2/IR 정렬/라인 추종). 빌드 안 됨. (`archive/vision_pkg`는 `src/vision_pkg` 사본이라 git 미추적.)
