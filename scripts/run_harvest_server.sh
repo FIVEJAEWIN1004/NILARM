@@ -4,7 +4,7 @@
 #   source scripts/activate_pumpkin_harvest.sh; export ROS_DOMAIN_ID=99
 #   python3 -m arm_control_pkg.pumpkin_harvest.harvest_action_server \
 #     --ros-args -p harvest_all_detected:=true
-# usage: run_harvest_server.sh start | check | status | build | restart | prescan | match
+# usage: run_harvest_server.sh start | check | status | build | restart | prescan | match | warmup
 #   build:   colcon build --packages-up-to arm_control_pkg in the OMX env
 #   restart: SIGTERM exactly the one running server (PID file / exact cmdline),
 #            start the current code, wait until /harvest has exactly 1 server
@@ -13,6 +13,7 @@
 #            running server if it predates no source change and accepts the
 #            pre-scan, else restart it (READY from its log) and pre-scan again.
 #            exit 0 = server + pre-scan ok, 3 = server ok but pre-scan failed
+#   warmup:  ksam_nilarm_ready: build if changed, fresh server, no pre-scan
 # Log: <repo>/.nilarm_logs/harvest_server.log, PID: harvest_server.pid (git-ignored)
 repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 log_dir="${repo}/.nilarm_logs"
@@ -129,10 +130,24 @@ prescan_request() {  # $1 = timeout s; prints the server's message
     grep -q 'success=True' <<<"${reply}"
 }
 
-newer_src() {  # prints a server source file changed after file $1 (none: empty)
+newer_src() {  # prints a server source/env file changed after file $1 (none: empty)
     (cd "${repo}" && find src/arm_control_pkg src/interfaces_pkg src/vision_pkg/models \
+        scripts/activate_pumpkin_harvest.sh \
         -type f -newer "$1" -not -path '*/__pycache__/*' -not -path '*/.pytest_cache/*' \
         -not -path '*/test/*' -print -quit 2>/dev/null)
+}
+
+build_if_changed() {
+    local stamp="${log_dir}/build.stamp" changed
+    changed="$(newer_src "${stamp}")"
+    if [[ ! -f "${stamp}" || -n "${changed}" ]]; then
+        echo "build: ${changed:-first build} changed"
+        touch "${stamp}.new"  # edits made during the build still count next time
+        bash "$0" build || return 1
+        mv "${stamp}.new" "${stamp}"
+    else
+        echo "build: skipped (no source change)"
+    fi
 }
 
 case "${1:-start}" in
@@ -182,16 +197,7 @@ match)
     mkdir -p "${log_dir}"
     exec 9>"${log_dir}/harvest_server.lock"
     flock -w 20 9 || { echo "FAIL: another start is still in progress"; exit 1; }
-    stamp="${log_dir}/build.stamp"
-    changed="$(newer_src "${stamp}")"
-    if [[ ! -f "${stamp}" || -n "${changed}" ]]; then
-        echo "build: ${changed:-first build} changed"
-        touch "${stamp}.new"  # edits made during the build still count next time
-        bash "$0" build || exit 1
-        mv "${stamp}.new" "${stamp}"
-    else
-        echo "build: skipped (no source change)"
-    fi
+    build_if_changed || exit 1
     pids="$(server_pids)"
     if [[ -n "${pids}" && "${pids}" == "$(cat "${pid_file}" 2>/dev/null)" \
           && -z "$(newer_src "${pid_file}")" ]]; then
@@ -205,8 +211,21 @@ match)
     wait_log_ready "${log_size}" || exit 1
     prescan_request 15 || exit 3
     ;;
+warmup)
+    # Before the match, on the match Wi-Fi: always a fresh server (a reused
+    # one may still sit on the old network), never the pre-scan (arm stays
+    # still). The next `match` then reuses it and only asks for the pre-scan.
+    mkdir -p "${log_dir}"
+    exec 9>"${log_dir}/harvest_server.lock"
+    flock -w 20 9 || { echo "FAIL: another start is still in progress"; exit 1; }
+    build_if_changed || exit 1
+    stop_server || exit 1
+    log_size="$(stat -c %s "${log}" 2>/dev/null || echo 0)"
+    start_server || exit 1
+    wait_log_ready "${log_size}" || exit 1
+    ;;
 *)
-    echo "usage: $0 start|check|status|build|restart|prescan|match" >&2
+    echo "usage: $0 start|check|status|build|restart|prescan|match|warmup" >&2
     exit 2
     ;;
 esac

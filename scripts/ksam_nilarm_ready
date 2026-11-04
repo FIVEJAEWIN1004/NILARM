@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# PINKY: before the match, on the match Wi-Fi. Builds (if changed) and starts a
+# fresh laptop /harvest server without moving the arm, so the next
+# `ksam_nilarm_7th` reuses it and starts in ~1-2 s.
+exec "$(dirname "$(readlink -f "$0")")/ksam_nilarm_7th" --warmup

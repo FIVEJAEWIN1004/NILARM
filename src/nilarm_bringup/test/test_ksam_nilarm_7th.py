@@ -34,6 +34,7 @@ SSH_STUB = r'''#!/usr/bin/env bash
 echo "ssh $*" >> "$STUB_LOG"
 case "${@: -1}" in
   *" match") exit "${STUB_MATCH_RC:-0}" ;;
+  *" warmup") exit "${STUB_WARMUP_RC:-0}" ;;
 esac
 exit 99
 '''
@@ -44,7 +45,7 @@ echo "nilarm-env PRESCAN=${NILARM_PRESCAN-unset} REMOTE=${NILARM_REMOTE_HARVEST-
 
 
 def run_ksam(tmp_path, remote_env='NILARM_LAPTOP_USER=lapuser\nNILARM_LAPTOP_HOST=10.9.8.7\n',
-             **overrides):
+             args=('--x',), **overrides):
     repo = tmp_path / 'repo'
     (repo / 'scripts').mkdir(parents=True)
     shutil.copy(KSAM, repo / 'scripts' / KSAM.name)
@@ -54,11 +55,12 @@ def run_ksam(tmp_path, remote_env='NILARM_LAPTOP_USER=lapuser\nNILARM_LAPTOP_HOS
     write_exe(tmp_path / 'bin' / 'ssh', SSH_STUB)
     log = tmp_path / 'calls.log'
     log.write_text('')
-    env = {k: v for k, v in os.environ.items() if not k.startswith('NILARM_')}
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith('NILARM_') and k != 'SSH_CLIENT'}
     env.update(PATH=f'{tmp_path / "bin"}:{os.environ["PATH"]}', STUB_LOG=str(log),
                NILARM_SSH_KEY='/nonexistent', ROS_DOMAIN_ID='7')
     env.update(overrides)
-    result = subprocess.run(['bash', str(repo / 'scripts' / KSAM.name), '--x'],
+    result = subprocess.run(['bash', str(repo / 'scripts' / KSAM.name), *args],
                             env=env, capture_output=True, text=True, timeout=30)
     result.calls = log.read_text().splitlines()
     result.nilarm = [c for c in result.calls if c.startswith('nilarm ')]
@@ -92,6 +94,7 @@ def test_reuses_nilarm_remote_env_and_domain_99(tmp_path):
     assert all('lapuser@10.9.8.7' in c for c in ssh)
     assert all('BatchMode=yes' in c and 'StrictHostKeyChecking=yes' in c for c in ssh)
     assert 'ROS_DOMAIN_ID=99 bash "$HOME/NILARM/scripts/run_harvest_server.sh" match' in ssh[0]
+    assert all('HostKeyAlias=nilarm-laptop' in c for c in ssh)  # any laptop IP
     assert not re.search(r'\d+\.\d+\.\d+\.\d+|@\w', KSAM.read_text())  # nothing hardcoded
 
 
@@ -107,6 +110,19 @@ def test_any_laptop_failure_never_launches_pinky(tmp_path, stub, message):
     assert message in result.stderr and '주행을 시작하지 않습니다' in result.stderr
 
 
+def test_ssh_session_address_beats_saved_laptop_address(tmp_path):
+    # Logged in from the laptop on another Wi-Fi: reach back that address.
+    result = run_ksam(tmp_path, SSH_CLIENT='192.168.4.2 53211 22')
+    ssh = [c for c in result.calls if c.startswith('ssh')]
+    assert result.returncode == 0 and ssh and all('lapuser@192.168.4.2' in c for c in ssh)
+
+
+def test_explicit_laptop_host_still_wins(tmp_path):
+    result = run_ksam(tmp_path, SSH_CLIENT='192.168.4.2 53211 22',
+                      NILARM_LAPTOP_HOST='10.1.1.1', NILARM_LAPTOP_USER='me')
+    assert all('me@10.1.1.1' in c for c in result.calls if c.startswith('ssh'))
+
+
 def test_unconfigured_laptop_never_sshs_or_launches(tmp_path):
     result = run_ksam(tmp_path, remote_env=None)
     assert result.returncode == 1 and result.calls == []
@@ -115,6 +131,27 @@ def test_unconfigured_laptop_never_sshs_or_launches(tmp_path):
 
 def test_setup_pinky_installs_the_command_link():
     assert ('ln -sfn "${repo}/scripts/ksam_nilarm_7th" "$HOME/.local/bin/ksam_nilarm_7th"'
+            in SETUP.read_text())
+
+
+def test_warmup_is_one_laptop_warmup_call_and_never_launches_pinky(tmp_path):
+    result = run_ksam(tmp_path, args=('--warmup',))
+    assert result.returncode == 0, result.stderr
+    ssh = [c for c in result.calls if c.startswith('ssh')]
+    assert len(ssh) == 1 and ssh[0].endswith('run_harvest_server.sh" warmup')
+    assert result.nilarm == [] and '준비 완료' in result.stdout
+
+
+def test_warmup_failure_reports_and_never_launches_pinky(tmp_path):
+    result = run_ksam(tmp_path, args=('--warmup',), STUB_WARMUP_RC='255')
+    assert result.returncode == 1 and result.nilarm == []
+    assert '노트북 SSH 연결 실패/끊김' in result.stderr
+
+
+def test_ksam_nilarm_ready_is_the_warmup_command():
+    ready = ROOT / 'scripts' / 'ksam_nilarm_ready'
+    assert os.access(ready, os.X_OK) and '--warmup' in ready.read_text()
+    assert ('ln -sfn "${repo}/scripts/ksam_nilarm_ready" "$HOME/.local/bin/ksam_nilarm_ready"'
             in SETUP.read_text())
 
 
@@ -395,3 +432,39 @@ def test_match_new_server_never_ready_fails(laptop):
 def test_match_prescan_failure_after_restart_is_exit_3(laptop):
     result = laptop('match', STUB_PRESCAN_FAILS='9')
     assert result.returncode == 3, result.stdout
+
+
+def test_match_env_script_changed_restarts_reused_server(laptop):
+    # e.g. YOLO_OFFLINE added to activate_pumpkin_harvest.sh: a running server
+    # keeps its old environment, so it must be restarted.
+    fresh_stamp(laptop)
+    server = laptop.dummy()
+    activate = laptop.repo / 'scripts' / 'activate_pumpkin_harvest.sh'
+    t = activate.stat().st_mtime + 10
+    os.utime(activate, (t, t))
+    result = laptop('match', servers=[server], pid_file=server)
+    assert result.returncode == 0, result.stdout
+    assert 'build: scripts/activate_pumpkin_harvest.sh changed' in result.stdout
+    assert kinds(result) == ['colcon', 'setsid', 'ros2 service call']
+
+
+def test_warmup_restarts_running_server_without_prescan(laptop):
+    # The reused server may sit on the previous Wi-Fi: always start fresh,
+    # and never ask for the pre-scan (the arm must stay still).
+    src_file(laptop, age_sec=100)
+    fresh_stamp(laptop)
+    server = laptop.dummy()
+    result = laptop('warmup', servers=[server], pid_file=server)
+    assert result.returncode == 0, result.stdout
+    assert kinds(result) == ['setsid'] and not alive(server)
+    assert 'build: skipped' in result.stdout and 'OK: /harvest server READY' in result.stdout
+
+
+def test_warmup_first_run_builds_and_starts(laptop):
+    result = laptop('warmup')
+    assert result.returncode == 0 and kinds(result) == ['colcon', 'setsid']
+
+
+def test_activate_script_keeps_yolo_offline():
+    text = (ROOT / 'scripts' / 'activate_pumpkin_harvest.sh').read_text()
+    assert 'export YOLO_OFFLINE=1' in text  # Pinky Wi-Fi has no internet

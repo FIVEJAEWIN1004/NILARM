@@ -41,15 +41,23 @@ Do these once, then rerun $0:
 EOF
 }
 
-if ! ssh-keygen -F "${NILARM_LAPTOP_HOST}" >/dev/null 2>&1; then
-    echo "NOT OK: ${NILARM_LAPTOP_HOST} is not in ~/.ssh/known_hosts yet"
-    manual_steps
-    exit 1
+# The match scripts check the laptop as "nilarm-laptop" (HostKeyAlias), so
+# its Wi-Fi IP may change. Copy the key already trusted for this IP once.
+alias_name=nilarm-laptop
+if ! ssh-keygen -F "${alias_name}" >/dev/null 2>&1; then
+    if ! ssh-keygen -F "${NILARM_LAPTOP_HOST}" >/dev/null 2>&1; then
+        echo "NOT OK: ${NILARM_LAPTOP_HOST} is not in ~/.ssh/known_hosts yet"
+        manual_steps
+        exit 1
+    fi
+    ssh-keygen -F "${NILARM_LAPTOP_HOST}" | awk -v a="${alias_name}" \
+        '!/^#/ && NF {$1 = a; print}' >>"$HOME/.ssh/known_hosts"
+    echo "added known_hosts ${alias_name} = key of ${NILARM_LAPTOP_HOST}"
 fi
-echo "OK: laptop host key is known"
+echo "OK: laptop host key is known (${alias_name})"
 
 ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=5
-          -i "${key}" -o IdentitiesOnly=yes)
+          -o HostKeyAlias="${alias_name}" -i "${key}" -o IdentitiesOnly=yes)
 if ! ssh "${ssh_opts[@]}" "${target}" true; then
     echo "NOT OK: passwordless SSH to ${target} failed"
     manual_steps

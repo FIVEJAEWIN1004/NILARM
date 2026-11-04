@@ -6,8 +6,11 @@
 # server is gone or rejects the pre-scan). Only when the /harvest server is up
 # does it exec this repo's `nilarm` (DISABLED drive, nilarm-start checks, then
 # /camera_drive/enable). Any failure: exit non-zero, Pinky never starts.
-# Laptop address: <repo>/.nilarm_remote_env (scripts/setup_remote_harvest.sh).
+# Laptop: the machine this SSH session came from (any Wi-Fi), else the address
+# in <repo>/.nilarm_remote_env; its host key is known_hosts "nilarm-laptop"
+# (scripts/setup_remote_harvest.sh).
 #   ksam_nilarm_7th [competition.launch.py args]
+#   ksam_nilarm_7th --warmup   (= ksam_nilarm_ready: laptop server only, no arm motion)
 repo="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 export ROS_DOMAIN_ID=99
 say() { echo "[KSAM 7TH] $*"; }
@@ -20,13 +23,15 @@ fail() {
 say "Pinky 대회 실행 준비 (ROS_DOMAIN_ID=${ROS_DOMAIN_ID})"
 if [[ -z "${NILARM_LAPTOP_HOST}" && -f "${repo}/.nilarm_remote_env" ]]; then
     source "${repo}/.nilarm_remote_env"
+    # Any Wi-Fi: reach back the laptop this SSH session came from.
+    [[ -n "${SSH_CLIENT}" ]] && NILARM_LAPTOP_HOST="${SSH_CLIENT%% *}"
 fi
 [[ -n "${NILARM_LAPTOP_HOST}" && -n "${NILARM_LAPTOP_USER}" ]] \
     || fail "노트북 접속 설정 없음 (scripts/setup_remote_harvest.sh <user>@<laptop_ip>)"
 target="${NILARM_LAPTOP_USER}@${NILARM_LAPTOP_HOST}"
 key="${NILARM_SSH_KEY:-$HOME/.ssh/nilarm_laptop_ed25519}"
 ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes
-          -o ConnectTimeout="${NILARM_SSH_TIMEOUT:-5}"
+          -o HostKeyAlias=nilarm-laptop -o ConnectTimeout="${NILARM_SSH_TIMEOUT:-5}"
           -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -T)
 [[ -f "${key}" ]] && ssh_opts+=(-i "${key}" -o IdentitiesOnly=yes)
 runner="\$HOME/${NILARM_LAPTOP_REPO:-NILARM}/scripts/run_harvest_server.sh"
@@ -35,6 +40,17 @@ laptop() {  # $1 = runner command, $2 = timeout s; 0 ok, 127 workspace missing, 
     timeout "$2" ssh "${ssh_opts[@]}" "${target}" \
         "[ -f \"${runner}\" ] || exit 127; ROS_DOMAIN_ID=${ROS_DOMAIN_ID} bash \"${runner}\" $1"
 }
+
+if [[ "$1" == "--warmup" ]]; then  # ksam_nilarm_ready: server only, arm stays still
+    say "노트북 로봇팔 서버 미리 준비 (${target}; 로봇팔은 움직이지 않음)"
+    laptop warmup 900
+    case $? in
+        0) say "준비 완료: 이제 ksam_nilarm_7th 를 실행하면 바로 시작합니다"; exit 0 ;;
+        127) fail "노트북 NILARM 작업공간 없음 (~/${NILARM_LAPTOP_REPO:-NILARM})" ;;
+        255) fail "노트북 SSH 연결 실패/끊김 (${target}; Wi-Fi/키/노트북 확인)" ;;
+        *) fail "노트북 빌드 또는 수확 서버 준비 실패 (위 FAIL 확인)" ;;
+    esac
+fi
 
 say "노트북 로봇팔 서버 + prescan 준비 (${target}; 코드가 바뀌었으면 빌드/재시작)"
 # The pre-scan starts here, while Pinky launches and runs its checks.

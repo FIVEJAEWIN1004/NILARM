@@ -23,6 +23,10 @@ fi
 source "$NILARM_ROOT/install/setup.bash"
 
 export NILARM_REPOSITORY_ROOT="$NILARM_ROOT"
+# Pinky Wi-Fi has no internet: `import ultralytics` resolves one.one.one.one /
+# dns.google to test it and waits out the DNS timeouts (~40 s at prescan
+# start). Nothing here downloads anything, so skip the check.
+export YOLO_OFFLINE=1
 export AMENT_PREFIX_PATH="$NILARM_ROOT/install/arm_control_pkg:${AMENT_PREFIX_PATH:-}"
 export PYTHONPATH="$NILARM_ROOT/src/arm_control_pkg:$NILARM_ROOT/src/vision_pkg:$NILARM_ROOT/build/arm_control_pkg:${PYTHONPATH:-}"
 
